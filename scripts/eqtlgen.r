@@ -24,3 +24,8 @@ table(eqtlgen$hgnc_symbol)
 save(eqtlgen, file=here("data", "eqtlgen.rdata"))
 
 
+# SBP tophits
+sbp_tophits <- ieugwasr::tophits("ieu-b-38")
+save(sbp_tophits, file=here("data", "sbp_tophits.rdata"))
+
+
