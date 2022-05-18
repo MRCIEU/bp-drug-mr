@@ -1,6 +1,6 @@
 #!/bin/bash
 
-dl="/mnt/storage/scratch/gh13047/data/bp-drug-mr"
+dl="../data"
 mkdir -p ${dl}/raw
 mkdir -p ${dl}/extract
 
