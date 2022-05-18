@@ -1,0 +1,15 @@
+query	entrezgene	name	symbol	alias	taxid	HGNC
+ACE	1636	angiotensin I converting enzyme	ACE	ACE1, CD143, DCP, DCP1	9606	HGNC:2707
+ADRB1	153	adrenoceptor beta 1	ADRB1	ADRB1R, B1AR, BETA1AR, FNSS2, RHR	9606	HGNC:285
+CACNA1C	775	calcium voltage-gated channel subunit alpha1 C	CACNA1C	CACH2, CACN2, CACNL1A1, CCHL1A1, CaV1.2	9606	HGNC:1390
+CACNA1D	776	calcium voltage-gated channel subunit alpha1 D	CACNA1D	CACH3, CACN4, CACNL1A2, CCHL1A2, Cav1.3	9606	HGNC:1391
+CACNA1F	778	calcium voltage-gated channel subunit alpha1 F	CACNA1F	AIED, COD3, COD4, CORDX, CORDX3	9606	HGNC:1393
+CACNA1S	779	calcium voltage-gated channel subunit alpha1 S	CACNA1S	CACNL1A3, CCHL1A3, Cav1.1, HOKPP, HOKPP1	9606	HGNC:1397
+CACNA2D1	781	calcium voltage-gated channel auxiliary subunit alpha2delta 1	CACNA2D1	CACNA2, CACNL2A, CCHL2A, LINC01112, lncRNA-N3	9606	HGNC:1399
+CACNA2D2	9254	calcium voltage-gated channel auxiliary subunit alpha2delta 2	CACNA2D2	CACNA2D, CASVDD	9606	HGNC:1400
+CACNB1	782	calcium voltage-gated channel auxiliary subunit beta 1	CACNB1	CAB1, CACNLB1, CCHLB1	9606	HGNC:1401
+CACNB2	783	calcium voltage-gated channel auxiliary subunit beta 2	CACNB2	CAB2, CACNLB2, CAVB2, MYSB	9606	HGNC:1402
+CACNB3	784	calcium voltage-gated channel auxiliary subunit beta 3	CACNB3	CAB3, CACNLB3	9606	HGNC:1403
+CACNB4	785	calcium voltage-gated channel auxiliary subunit beta 4	CACNB4	CAB4, CACNLB4, EA5, EIG9, EJM	9606	HGNC:1404
+CACNG1	786	calcium voltage-gated channel auxiliary subunit gamma 1	CACNG1	CACNLG	9606	HGNC:1405
+SLC12A3	6559	solute carrier family 12 member 3	SLC12A3	NCC, NCCT, TSC	9606	HGNC:10912
