@@ -13,6 +13,15 @@ table(chrpos1 %in% chrpos2)
 table(wojcik %in% chrpos2)
 table(wojcik %in% chrpos1)
 chrpos <- unique(c(chrpos1, chrpos2, wojcik))
+
 sbp <- query_gwas("/mnt/storage/private/mrcieu/research/scratch/IGD/data/dev/panukbb_gwas_import/processed/ukb-e-SBP_p2_EUR/ukb-e-SBP_p2_EUR.vcf.gz", chrompos=chrpos)
 sbp <- vcf_to_tibble(sbp)
 save(sbp, file=here("data", "ukb-e-SBP_p2_EUR.rdata"))
+
+
+sbp_p3 <- query_gwas("/mnt/storage/private/mrcieu/research/scratch/IGD/data/dev/panukbb_gwas_import/processed/ukb-e-SBP_p3_EUR/ukb-e-SBP_p3_EUR.vcf.gz", chrompos=chrpos)
+sbp_p3 <- vcf_to_tibble(sbp_p3)
+sbp_p3
+save(sbp_p3, file=here("data", "ukb-e-SBP_p3_EUR.rdata"))
+
+
