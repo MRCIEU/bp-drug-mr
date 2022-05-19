@@ -1,13 +1,13 @@
 library(gwasvcf)
+set_bcftools()
 library(here)
 
 a <- read.table(here("data", "gill_sbp.txt"), header=T)
-
-chrpos <- paste0(a$Chr, ":", a$Pos)
-
-set_bcftools()
+chrpos1 <- paste0(a$Chr, ":", a$Pos)
+load(here("data", "sbp_tophits.rdata"))
+chrpos2 <- paste0(sbp_tophits$chr, ":", sbp_tophits$position)
+table(chrpos1 %in% chrpos2)
+chrpos <- unique(c(chrpos1, chrpos2))
 sbp <- query_gwas("/mnt/storage/private/mrcieu/research/scratch/IGD/data/dev/panukbb_gwas_import/processed/ukb-e-SBP_p2_EUR/ukb-e-SBP_p2_EUR.vcf.gz", chrompos=chrpos)
-
 sbp <- vcf_to_tibble(sbp)
 save(sbp, file=here("data", "ukb-e-SBP_p2_EUR.rdata"))
-
