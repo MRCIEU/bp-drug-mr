@@ -1,0 +1,97 @@
+---
+title: "Understand distribution of the phenotyes"
+output: html_document
+date: "2022-09-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Library required packages
+```{r}
+library(data.table)
+suppressMessages(library(dplyr))
+```
+
+
+## Set work directory
+```{r}
+dir <- c("set_working_dir")
+setwd(dir)
+phen <- fread("phenotye.txt", header=T, fill = T, sep= " ", na.strings = c("", " ", NA), data.table = F, stringsAsFactors = FALSE)
+cov <- fread("cov.txt", header=T, fill = T, sep= " ", na.strings = c("", " ", NA), data.table = F, stringsAsFactors = FALSE)
+pc <- fread("pc.txt", header=T, fill = T, sep= " ", na.strings = c("", " ", NA), data.table = F, stringsAsFactors = FALSE)
+```
+
+## Check files
+```{r}
+phen_name <- c("sbp", "dbp", "tc", "ldlc", "tg", "chd", "stroke", "hypertension")
+phen_check <- phen_name %in% names(phen)[-1]
+if (any(phen_check==FALSE))
+  {message(paste0("Please check the file includes all phenotype. The following phenotypes are missing: ", phen_name[!phen_check]))}
+
+cov_name <- c("age", "sex")
+cov_check <- cov_name %in% names(cov)[-1]
+if (any(cov_check==FALSE))
+  {message(paste0("Please check the file includes all phenotype. The following phenotypes are missing: ", cov_name[!cov_check]))}
+
+pc_name <- c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6", "PC7", "PC8", "PC9", "PC10", 
+               "PC11", "PC12", "PC13", "PC14", "PC15", "PC16", "PC17", "PC18", "PC19", "PC20")
+pc_check <- pc_name %in% names(pc)[-1]
+if (any(pc_check==FALSE))
+{message(paste0("Please check the file includes all phenotype. The following phenotypes are missing: ", pc_name[!pc_check]))}
+
+```
+
+
+## Check phenotypes
+```{r}
+message("Checking blood pressure phenotypes")
+out <- list()
+out$sbp <- subset(phen, phen$sbp<=20 | phen$sbp>=300)$IID
+message("The following individuals will be removed for SBP analyses:")
+print(out$sbp)
+
+out$dbp <- subset(phen, phen$dbp<=5 | phen$dbp>=200)$IID
+message("The following individuals will be removed for DBP analyses:")
+print(out$dbp)
+
+message("Checking lipid phenotypes")
+out$ldlc <- subset(phen, phen$tg>400)$IID
+message("The following individuals will be removed for LDLC analyses:")
+print(out$ldlc)
+```
+
+
+```{r}
+output <- NULL
+for (i in phen_name)
+  {
+   phe <- phen %>% select("IID", i)
+   if(i=="sbp"){phe <- subset(phe, !(IID %in% out$sbp))}
+   if(i=="dbp"){phe <- subset(phe, !(IID %in% out$dbp))}
+   if(i=="ldlc"){phe <- subset(phe, !(IID %in% out$ldlc))}
+   
+   dat <- merge(phe, cov, by="IID") %>% merge(., pc, by="IID")
+   
+   mean <- mean(phe[[i]], na.rm=T)
+   sd <- sd(phe[[i]], na.rm=T)
+   median <- median(phe[[i]], na.rm=T)
+   q1 <- as.numeric(summary(phe[[i]])[2])
+   q3 <- as.numeric(summary(phe[[i]])[5])
+   min <- as.numeric(summary(phe[[i]])[1])
+   max <- as.numeric(summary(phe[[i]])[6])
+  
+   model1 <- lm(dat[[i]] ~ sex + age + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10
+                          + PC11 + PC12 + PC13 + PC14 + PC15 + PC16 + PC17 + PC18 + PC19 + PC20, data = dat)
+   sd_resid <- sd(resid(model1))
+ 
+   N <- nrow(phe)
+   
+   stats <- data.frame(i, N, mean, sd, sd_resid, median, min, max, q1, q3)
+   output<-rbind(output,stats)
+  }
+
+write.table(output, file=out_file, row=F, qu=F)
+```
