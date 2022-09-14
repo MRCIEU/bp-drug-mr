@@ -1,5 +1,5 @@
 ---
-title: "Understand distribution of the phenotyes"
+title: "Example output for the pheno_sum script"
 output: html_document
 date: "2022-09-08"
 ---
@@ -55,11 +55,11 @@ Please edit the following paths and names:
 
 ```{r}
 # change working directory to paths to relevant input files: Phenotype, Covariates, PC scores
-dir <- c("set_working_dir")
+dir <- c("/Users/yc16575/bp-drug-mr/scripts/data_harmonization")
 setwd(dir)
-phen <- fread("phenotye.csv", header=T, fill = T, na.strings = c("", " ", NA), data.table = F, stringsAsFactors = FALSE)
-cov <- fread("cov.csv", header=T, fill = T, na.strings = c("", " ", NA), data.table = F, stringsAsFactors = FALSE)
-pc <- fread("pc.csv", header=T, fill = T, na.strings = c("", " ", NA), data.table = F, stringsAsFactors = FALSE)
+phen <- fread("phenotye.csv", header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
+cov <- fread("cov.csv", header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
+pc <- fread("pc.csv", header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
 ```
 
 
@@ -70,7 +70,7 @@ Please define phenotype names if your phenotype file is not labelled as follows 
 
 Ignore this chunk if your phenotypes are labelled correctly.
 
-```{r}
+```r
 phen <- phen %>% 
          rename(
            sbp = your_column_name,
