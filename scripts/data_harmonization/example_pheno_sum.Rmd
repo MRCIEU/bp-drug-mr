@@ -52,7 +52,7 @@ Directory to be edited with paths to relevant input files.
 Please edit the following paths and names:
 
 "set_working_dir"
-"phenotye.csv"
+"phenotype.csv"
 "cov.csv"
 "pc.csv"
 
@@ -60,7 +60,7 @@ Please edit the following paths and names:
 # change working directory to paths to relevant input files: Phenotype, Covariates, PC scores
 dir <- c("/Users/yc16575/bp-drug-mr/scripts/data_harmonization")
 setwd(dir)
-phen <- fread("phenotye.csv", header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
+phen <- fread("phenotype.csv", header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
 cov <- fread("cov.csv", header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
 pc <- fread("pc.csv", header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
 ```
