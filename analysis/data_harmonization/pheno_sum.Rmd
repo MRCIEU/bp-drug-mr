@@ -23,7 +23,7 @@ The following script will return the distribution of the phenotype and modified 
 
 The data requirements for the script are as follows:
 
-a) Phenotype data for one or more traits, e.g. SBP, DBP.
+a) Phenotype data for one or more traits, i.e. SBP, DBP, PP, TC, LDLC, TG, CHD, Stroke, hypertension
 
 Phenotype file format.
 
@@ -59,6 +59,7 @@ A PC file should be provided satisfying the following requirements:
 library(data.table)
 suppressMessages(library(dplyr))
 library(ggplot2)
+library(ggpubr)
 ```
 
 
@@ -75,11 +76,12 @@ Please edit the following paths and names:
 
 ```{r}
 # change working directory to paths to relevant input files: Phenotype, Covariates, PC scores
-dir <- c("set_input_dir")
-diro <- c("set_output_dir") #e.g. "your-home-directory/bp-drug-mr/outputs"
-phen <- fread(paste0(dir, "/phenotype.csv"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
-cov <- fread(paste0(dir, "/cov.csv"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
-pc <- fread(paste0(dir, "/pc.csv"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
+dir <- c("/Users/yc16575/bp-drug-mr/data")
+diro <- c("/Users/yc16575/bp-drug-mr/outputs") #e.g. "your-home-directory/bp-drug-mr/outputs"
+
+phen <- fread(paste0(dir, "/mrc_phenotypes_eur.txt"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
+cov <- fread(paste0(dir, "/mrc_covariates.txt"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
+pc <- fread(paste0(dir, "/mrc_pca.txt"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
 ```
 
 
@@ -147,36 +149,38 @@ updated_dat3 <- NULL
 for (i in cont)
   {
    phe <- phen %>% select("IID", i)
+   
+   phe <- subset(phe, !is.na(phe[[i]]))
+  
    if(i=="sbp"){phe <- subset(phe, !(IID %in% out$sbp))}
    if(i=="dbp"){phe <- subset(phe, !(IID %in% out$dbp))}
    if(i=="ldlc"){phe <- subset(phe, !(IID %in% out$ldlc))}
    
-   dat <- merge(phe, cov, by="IID") %>% merge(., pc, by="IID")
+   dat <- merge(phe, cov, by="IID") %>% merge(., pc, by="IID") 
    
    mean <- mean(phe[[i]], na.rm=T)
    sd <- sd(phe[[i]], na.rm=T)
    median <- median(phe[[i]], na.rm=T)
-   min <- as.numeric(summary(phe[[i]])[1])
-   max <- as.numeric(summary(phe[[i]])[6])
-   q1 <- as.numeric(summary(phe[[i]])[2])
-   q3 <- as.numeric(summary(phe[[i]])[5])
-   c25 <- as.numeric(quantile(phe[[i]], probs = (0:100)/100)[1])
-   c50 <- as.numeric(quantile(phe[[i]], probs = (0:100)/100)[25])
-   c75 <- as.numeric(quantile(phe[[i]], probs = (0:100)/100)[75])
+   min <- as.numeric(summary(phe[[i]])[1], na.rm=T)
+   max <- as.numeric(summary(phe[[i]])[6], na.rm=T)
+   q1 <- as.numeric(summary(phe[[i]])[2], na.rm=T)
+   q3 <- as.numeric(summary(phe[[i]])[5], na.rm=T)
+   c25 <- as.numeric(quantile(phe[[i]], probs = (0:100)/100, na.rm=T)[1])
+   c50 <- as.numeric(quantile(phe[[i]], probs = (0:100)/100, na.rm=T)[25])
+   c75 <- as.numeric(quantile(phe[[i]], probs = (0:100)/100, na.rm=T)[75])
 
    model1 <- lm(dat[[i]] ~ sex + age + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10
                           + PC11 + PC12 + PC13 + PC14 + PC15 + PC16 + PC17 + PC18 + PC19 + PC20, data = dat)
    dat$resid_cov <- resid(model1)
-   colnames(resid_cov) <- i
    sd_resid_cov <- sd(resid(model1))
    coeff_cov <- coefficients(model1)
    
+   dat <- dat %>% na.omit()
    if(i=="sbp" | i=="dbp" | i=="pp")
      {model2 <- lm(dat[[i]] ~ sex + age + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10
                               + PC11 + PC12 + PC13 + PC14 + PC15 + PC16 + PC17 + PC18 + PC19 + PC20
                               + med_hypertension, data = dat)
       dat$resid_med <- resid(model2)
-      colnames(resid_cov) <- i
       sd_resid_med <- sd(resid(model2))
       coeff_med <- coefficients(model2)
    }
@@ -187,7 +191,6 @@ for (i in cont)
                               + med_ldlc, data = dat)
       dat$resid_med <- resid(model2)
       sd_resid_med <- sd(resid(model2))
-      colnames(resid_cov) <- i
       coeff_med <- coefficients(model2)
     }
    
@@ -240,15 +243,15 @@ write.table(output2, file=paste0(diro, "/share/distribution/phen-cov-summary_bi.
 
 # Save output files: Remove outliers
 updated_dat1 <- updated_dat1 %>% dplyr::bind_rows(., .id="phen") %>% tidyr::spread(phen, pheno, fill=NA)
-write.csv(output, file=paste0(diro, "/do-not-share/updated_phenotypes/updated_phenotype_cov.txt"), row.names=F, quote=F)
+write.csv(updated_dat1, file=paste0(diro, "/do_not_share/updated_phenotypes/updated_phenotype_reout.txt"), row.names=F, quote=F)
 
 # Save output files: Covariate adjusted phenotype
 updated_dat2 <- updated_dat2 %>% dplyr::bind_rows(., .id="phen") %>% tidyr::spread(phen, resid_cov, fill=NA)
-write.csv(output, file=paste0(diro, "/do-not-share/updated_phenotypes/updated_phenotype_cov.txt"), row.names=F, quote=F)
+write.csv(updated_dat2, file=paste0(diro, "/do_not_share/updated_phenotypes/updated_phenotype_covadj.txt"), row.names=F, quote=F)
 
 # Save output files: Covariate + medication adjusted phenotype
 updated_dat3 <- updated_dat3 %>% dplyr::bind_rows(., .id="phen") %>% tidyr::spread(phen, resid_med, fill=NA)
-write.csv(output, file=paste0(diro, "/do-not-share/updated_phenotypes/updated_phenotype_cov.txt"), row.names=F, quote=F)
+write.csv(updated_dat3, file=paste0(diro, "/do_not_share/updated_phenotypes/updated_phenotype_cov_med_adj.txt"), row.names=F, quote=F)
 ```
 
 
@@ -263,7 +266,7 @@ Output will be stored in your_working_directory/output/share/plots.
 ```{r}
 
 # PC loading plots
-svg(paste0(diro, "/share/plots/pc_loading.svg"))
+pdf(paste0(diro, "/share/plots/pc_loading.pdf"), width=6, height=3, onefile=TRUE)
 pairs(pc[,2:7], col=c("black", "purple"))
 dev.off() 
 
@@ -300,19 +303,19 @@ p_med[[i]] <- ggplot(updated_dat3, aes(x=.data[[i]])) +
               xlab(i) 
 }
 
-svg(paste0(diro, "/share/plots/pheno_distribution_raw.svg"))
+pdf(paste0(diro, "/share/plots/pheno_distribution_raw.pdf"))
   ggarrange(plotlist=p_raw, nrow = 2, ncol = ceiling(length(cont)/2))
 dev.off() 
 
-svg(paste0(diro, "/share/plots/pheno_distribution_outlier.svg"))
+pdf(paste0(diro, "/share/plots/pheno_distribution_outlier.pdf"))
   ggarrange(plotlist=p_out, nrow = 2, ncol = ceiling(length(cont)/2))
 dev.off() 
 
-svg(paste0(diro, "/share/plots/pheno_distribution_cov_adj.svg"))
+pdf(paste0(diro, "/share/plots/pheno_distribution_cov_adj.pdf"))
   ggarrange(plotlist=p_cov, nrow = 2, ncol = ceiling(length(cont)/2))
 dev.off() 
 
-svg(paste0(diro, "/share/plots/pheno_distribution_med_adj.svg"))
+pdf(paste0(diro, "/share/plots/pheno_distribution_med_adj.pdf"))
   ggarrange(plotlist=p_med, nrow = 2, ncol = ceiling(length(cont)/2))
 dev.off() 
 ```

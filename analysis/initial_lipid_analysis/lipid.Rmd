@@ -1,0 +1,271 @@
+---
+title: "Lipid"
+output: html_notebook
+---
+
+  ```{r}
+library(here)
+library(dplyr)
+library(TwoSampleMR)
+library(ieugwasr)
+library(ggplot2)
+library(data.table)
+
+```
+
+## Initial analysis using UK Biobank multi-ancestry samples
+
+In this analyses we ask whether genetic effects on Europeans a) replicate in non-Europeans and b) have the same effect sizes, and c) whether different drug target genes have different effect sizes in different populations.
+Drugs of our interests and their target are as follows:
+  * Statins: HMGCR, ITGAL, HDAC2
+  * Ezetimibe: NPC1L1, SOAT1, ANPEP
+  * PCSK9 inhibitors (Repatha, Praluent): PCSK9
+
+Or
+  * LDL cholesterol: HMGCR, PCSK9, and NPC1L1
+  * HDL cholesterol: CETP
+  * TG: APOC3, ANGPTL3, ANGPTL4, and LPL
+
+SNPs identified by GLGC (2022).
+
+```{r}
+glgc_lipid <- fread(here("data", "glgc_lipid.txt"))
+glgc_lipid %>% str()
+```
+
+SBP GWAS datasets for different populations
+
+```{r}
+sbp_eur_id <- "ieu-b-110"
+sbp_afr_id <- "ukb-e-30780_AFR"
+sbp_csa_id <- "ukb-e-LDLC_CSA"
+sbp_eas_id <- "ukb-e-30780_EAS"
+sbp_mid_id <- "ukb-e-SBP_p2_MID"
+out_p2 <- c("ukb-e-SBP_p2_AFR", "ukb-e-SBP_p2_CSA", "ukb-e-SBP_p2_EAS", "ukb-e-SBP_p2_MID")
+out_p3 <- c("ukb-e-SBP_p3_AFR", "ukb-e-SBP_p3_CSA", "ukb-e-SBP_p3_EAS", "ukb-e-SBP_p3_MID")
+
+ieugwasr::gwasinfo(c(sbp_eur_id, sbp_afr_id, sbp_csa_id, sbp_eas_id, sbp_mid_id)) %>% str()
+```
+
+Get SBP data for EUR
+
+```{r}
+load(here("data", "ukb-e-SBP_p2_EUR.rdata"))
+sbp$pval <- 10^(-sbp$LP)
+str(sbp)
+sbp_e <- format_data(sbp, snp_col="rsid", chr_col="seqnames", pos_col="start", effect_allele_col="ALT", other_allele_col="REF", beta_col="ES", se_col="SE", pval_col="pval", eaf_col="AF")
+sbp_o <- extract_outcome_data(gill_sbp$SNP, out_p2)
+sbp_d <- harmonise_data(sbp_e, sbp_o, action=1)
+sbp_d <- inner_join(sbp_d, select(gill_sbp, SNP, target=gene), by="SNP") %>%
+  mutate(
+    id.exposure=paste0(id.exposure, "_", target),
+    exposure=target
+  )
+res1 <- mr(sbp_d, method_list=c("mr_wald_ratio", "mr_ivw"))
+
+load(here("data", "sbp_tophits.rdata"))
+sbp_o <- extract_outcome_data(sbp_tophits$rsid, out_p2)
+sbp_th_dat <- harmonise_data(sbp_e, sbp_o, action=1) %>%
+  mutate(
+    id.exposure="UKB+ICBP discovery",
+    exposure=id.exposure
+  )
+res2 <- mr(sbp_th_dat, method_list=c("mr_wald_ratio", "mr_ivw"))
+
+wojcik <- c("2:26932031", "4:81174592", "7:27243221", "4:81169912", "10:104616663", "4:81184341", "2:127016740", "6:151004770", "8:142389954", "4:81164723", "10:104846178")
+sbp_e$chrpos <- paste0(sbp_e$chr.exposure, ":", sbp_e$pos.exposure)
+wojcik_rsid <- subset(sbp_e, chrpos %in% wojcik)$SNP
+wojcik_rsid
+sbp_o <- extract_outcome_data(wojcik_rsid, out_p2)
+sbp_th_dat <- harmonise_data(sbp_e, sbp_o, action=1) %>%
+  mutate(
+    id.exposure="Wojcik non-EUR discovery",
+    exposure=id.exposure
+  )
+res3 <- mr(sbp_th_dat, method_list=c("mr_wald_ratio", "mr_ivw"))
+
+res <- bind_rows(res1, res2, res3)
+temp <- group_by(res, exposure) %>% summarise(n=max(nsnp))
+res <- inner_join(res, temp)
+
+subset(res, method %in% c("Wald ratio", "Inverse variance weighted")) %>%
+  mutate(pop=gsub("ukb-e-SBP_p2_", "", id.outcome), gene=paste0(exposure, " (nsnp=", n,")")) %>%
+  ggplot(., aes(x=b, y=pop)) +
+  geom_point() +
+  geom_errorbarh(aes(xmin=b-1.96*se, xmax=b+1.96*se), height=0) +
+  geom_vline(xintercept=1, linetype="dotted") +
+  geom_vline(xintercept=0) +
+  facet_grid(gene ~ .) +
+  labs(x="EUR/non-EUR SBP effect (95% CI)", y="Population") +
+  theme(strip.text.y=element_text(angle=0))
+```
+
+Re-run with SBP corrected for medication use
+
+```{r}
+load(here("data", "ukb-e-SBP_p3_EUR.rdata"))
+sbp$pval <- 10^(-sbp$LP)
+str(sbp_p3)
+sbp_e <- format_data(sbp_p3, snp_col="rsid", chr_col="seqnames", pos_col="start", effect_allele_col="ALT", other_allele_col="REF", beta_col="ES", se_col="SE", pval_col="pval", eaf_col="AF")
+sbp_o <- extract_outcome_data(gill_sbp$SNP, out_p3)
+sbp_d <- harmonise_data(sbp_e, sbp_o, action=1)
+sbp_d <- inner_join(sbp_d, select(gill_sbp, SNP, target=gene), by="SNP") %>%
+  mutate(
+    id.exposure=paste0(id.exposure, "_", target),
+    exposure=target
+  )
+res1 <- mr(sbp_d, method_list=c("mr_wald_ratio", "mr_ivw"))
+
+load(here("data", "sbp_tophits.rdata"))
+sbp_o <- extract_outcome_data(sbp_tophits$rsid, out_p3)
+sbp_th_dat <- harmonise_data(sbp_e, sbp_o, action=1) %>%
+  mutate(
+    id.exposure="UKB+ICBP discovery",
+    exposure=id.exposure
+  )
+res2 <- mr(sbp_th_dat, method_list=c("mr_wald_ratio", "mr_ivw"))
+
+wojcik <- c("2:26932031", "4:81174592", "7:27243221", "4:81169912", "10:104616663", "4:81184341", "2:127016740", "6:151004770", "8:142389954", "4:81164723", "10:104846178")
+sbp_e$chrpos <- paste0(sbp_e$chr.exposure, ":", sbp_e$pos.exposure)
+wojcik_rsid <- subset(sbp_e, chrpos %in% wojcik)$SNP
+wojcik_rsid
+sbp_o <- extract_outcome_data(wojcik_rsid, out_p3)
+sbp_th_dat <- harmonise_data(sbp_e, sbp_o, action=1) %>%
+  mutate(
+    id.exposure="Wojcik non-EUR discovery",
+    exposure=id.exposure
+  )
+res3 <- mr(sbp_th_dat, method_list=c("mr_wald_ratio", "mr_ivw"))
+
+res <- bind_rows(res1, res2, res3)
+temp <- group_by(res, exposure) %>% summarise(n=max(nsnp))
+res <- inner_join(res, temp)
+
+subset(res, method %in% c("Wald ratio", "Inverse variance weighted")) %>%
+  mutate(pop=gsub("ukb-e-SBP_p2_", "", id.outcome), gene=paste0(exposure, " (nsnp=", n,")")) %>%
+  ggplot(., aes(x=b, y=pop)) +
+  geom_point() +
+  geom_errorbarh(aes(xmin=b-1.96*se, xmax=b+1.96*se), height=0) +
+  geom_vline(xintercept=1, linetype="dotted") +
+  geom_vline(xintercept=0) +
+  facet_grid(gene ~ .) +
+  labs(x="EUR/non-EUR SBP effect (95% CI)", y="Population") +
+  theme(strip.text.y=element_text(angle=0))
+```
+
+### Summary
+
+- Genetic effects in CCB appear to be larger in Europeans than Africans, but BB and ACE are more consistent
+- Using all European discovery SNPs leads to overestimation of European effect size, but using multi-ancestry discovery rectifies this
+
+
+## pQTL analysis
+
+```{r}
+load(here("data", "aric_pqtl.rdata"))
+str(aric_pqtl)
+table(aric_pqtl$pop, aric_pqtl$gene_name)
+```
+
+```{r}
+ggplot(aric_pqtl, aes(x=POS, y=-log10(P))) +
+  geom_point() +
+  facet_grid(pop ~ gene_name, scale="free_x")
+```
+
+```{r}
+aric_pqtl %>%
+  group_by(pop, gene_name) %>%
+  mutate(fdr=p.adjust(P, "fdr")) %>%
+  summarise(min_fdr=min(fdr))
+```
+
+No pQTLs for CCB in ARIC
+
+## eQTL analysis in MESA
+
+```{r}
+load(here("data", "mesa_eqtl.rdata"))
+str(mesa_eqtl)
+```
+
+```{r}
+ggplot(mesa_eqtl, aes(x=pos_snps, y=-log10(pvalue))) +
+  geom_point() +
+  facet_grid(pop ~ gene_name, scale="free_x")
+```
+
+```{r}
+mesa_eqtl %>%
+  group_by(pop, gene_name) %>%
+  mutate(fdr=p.adjust(pvalue, "fdr")) %>%
+  summarise(min_fdr=min(fdr))
+```
+
+No eQTLs for CCB in MESA.
+
+## eQTL in eQTLGen
+
+```{r}
+load(here("data", "eqtlgen.rdata"))
+str(eqtlgen)
+```
+
+```{r}
+sbp_o <- extract_outcome_data(eqtlgen$rsid, out_p3)
+sbp_d <- harmonise_data(sbp_e, sbp_o, action=1)
+sbp_d <- inner_join(sbp_d, select(eqtlgen, SNP=rsid, target=hgnc_symbol), by="SNP") %>%
+  mutate(
+    id.exposure=paste0(id.exposure, "_", target),
+    exposure=target
+  )
+res1 <- mr(sbp_d, method_list=c("mr_wald_ratio", "mr_ivw"))
+temp <- group_by(res1, exposure) %>% summarise(n=max(nsnp))
+res1 <- inner_join(res1, temp)
+
+subset(res1, method %in% c("Wald ratio", "Inverse variance weighted")) %>%
+  mutate(pop=gsub("ukb-e-SBP_p3_", "", id.outcome), gene=paste0(exposure, " (nsnp=", n,")")) %>%
+  ggplot(., aes(x=b, y=pop)) +
+  geom_point() +
+  geom_errorbarh(aes(xmin=b-1.96*se, xmax=b+1.96*se), height=0) +
+  geom_vline(xintercept=1, linetype="dotted") +
+  geom_vline(xintercept=0) +
+  facet_grid(gene ~ .) +
+  labs(x="EUR/non-EUR SBP effect (95% CI)", y="Population") +
+  theme(strip.text.y=element_text(angle=0))
+```
+
+Re-run using only SNPs that have fdr < 0.05 in Europeans
+
+```{r}
+keep <- subset(sbp_e, SNP %in% sbp_d$SNP) %>%
+  mutate(fdr=p.adjust(pval.exposure, "fdr")) %>%
+  filter(fdr < 0.05)
+res1 <- mr(sbp_d %>% filter(SNP %in% keep$SNP), method_list=c("mr_wald_ratio", "mr_ivw"))
+temp <- group_by(res1, exposure) %>% summarise(n=max(nsnp))
+res1 <- inner_join(res1, temp)
+
+subset(res1, method %in% c("Wald ratio", "Inverse variance weighted")) %>%
+  mutate(pop=gsub("ukb-e-SBP_p3_", "", id.outcome), gene=paste0(exposure, " (nsnp=", n,")")) %>%
+  ggplot(., aes(x=b, y=pop)) +
+  geom_point() +
+  geom_errorbarh(aes(xmin=b-1.96*se, xmax=b+1.96*se), height=0) +
+  geom_vline(xintercept=1, linetype="dotted") +
+  geom_vline(xintercept=0) +
+  facet_grid(gene ~ .) +
+  labs(x="EUR/non-EUR SBP effect (95% CI)", y="Population") +
+  theme(strip.text.y=element_text(angle=0))
+```
+
+Difficult to make much inference here, need larger sample size in non-Europeans
+
+
+## Next steps
+
+1. GWAS of SBP in each ancestry - making sure to analyse scale and attempt to harmonise measurements
+2. Perform multiple ancestry finemapping for SBP loci
+3. Stratify instruments by drug target to determine if relative SNP effects across populations differ
+4. Analysis of SBP drug loci associate with eQTLs / pQTLs
+5. Factorial MR / Analysis of interactions: do genetic effects across drug targets interact
+
+
