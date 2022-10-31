@@ -76,8 +76,8 @@ Please edit the following paths and names:
 
 ```{r}
 # change working directory to paths to relevant input files: Phenotype, Covariates, PC scores
-dir <- c("/Users/yc16575/bp-drug-mr/data")
-diro <- c("/Users/yc16575/bp-drug-mr/outputs") #e.g. "your-home-directory/bp-drug-mr/outputs"
+dir <- c("/Users/yc16575/bp-drug-mr/analysis/data_harmonization/data")
+diro <- c("/Users/yc16575/bp-drug-mr/analysis/data_harmonization/outputs") #e.g. "your-home-directory/bp-drug-mr/outputs"
 
 phen <- fread(paste0(dir, "/mrc_phenotypes_eur.txt"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
 cov <- fread(paste0(dir, "/mrc_covariates.txt"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)

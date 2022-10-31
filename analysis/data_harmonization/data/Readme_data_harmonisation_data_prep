@@ -1,0 +1,31 @@
+# Script Prerequisites & Requirements
+
+The data requirements for the script are as follows:
+
+a) Phenotype data for one or more traits, i.e. SBP, DBP, PP, TC, LDLC, TG, CHD, Stroke, hypertension
+
+Phenotype file format.
+
+* First column should be FID/IID.
+* Rest of columns should contain available phenotypes, in any order, preferably labelled as follows in " ":
+"sbp", "dbp", "pp", tc", "ldlc", "tg", "chd", "stroke", "hypertension",
+* CSV format.
+
+b) Complete covariate data such as age, and sex
+
+A covariate file should be provided satisfying the following requirements:
+
+* First column should be IID.
+* One column should contain age (years), defined as year of the survey minus YoB and labelled as "age".
+* One column should contain sex, labelled as "sex". Males should be coded as 1 and females as 0.
+* One column should contain medication use status for blood pressure, labelled as "medication_hypertension". Individuals on anti-hypertensive medication should be coded as 1 and the others as 0.
+* e column should contain medication use status for LDLc, labelled as "medication_hypertension". Individuals on lipid lowering medication should be coded as 1 and the others as 0.
+* CSV format.
+
+c) Genomic principal components (~ 20 PCs)
+
+A PC file should be provided satisfying the following requirements:
+
+* First column should be IID.
+* Up to twenty columns containing the first 20 genomic principal components. Note that it is potentially possible to alter the primary analysis to include less principal components for computational efficiency.
+* Preferably labelled in capital letter.
