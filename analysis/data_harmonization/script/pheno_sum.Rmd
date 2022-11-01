@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Introduction
 
-The following script will return the distribution of the phenotype and modified phenotype files. Little or no user input should be required beyond cleaning and formatting the phenotype. Please send us the output files saved in the directory "~/output_share". **Sharing of individual level data is not necessary.** The following will be done:
+The following script will return the distribution of the phenotype and modified phenotype files. Little or no user input should be required beyond cleaning and formatting the phenotype. Please send us the output files saved in the directory "~/outputs/share". **Sharing of individual level data is not necessary.** The following will be done:
 
 * Remove outliers for blood pressure and LDLc based on the previous studies.
 * Generate modified phenotype files after 1) removing outliers, 2) adjustment for individual's medication status and 3) adjustment for the covariates (for each study to keep for the further analysis; will not be shared).
@@ -56,7 +56,7 @@ A PC file should be provided satisfying the following requirements:
 
 ```{r}
 # Library required packages
-library(data.table)
+suppressMessages(library(data.table))
 suppressMessages(library(dplyr))
 library(ggplot2)
 library(ggpubr)
@@ -234,24 +234,24 @@ for (i in bi)
   }
 
 # Save output files: Distribution of the phenotype, continuous
-write.table(output, file=paste0(diro, "/share/distribution/phen-cov-summary_cont.txt"), row.names=F, quote=F)
-write.table(coeff, file=paste0(diro, "/share/distribution/phen-cov-summary_cont_coeff.txt"), row.names=F, quote=F)
+write.table(output, file=paste0(diro, "/share/phen-cov-summary_cont.txt"), row.names=F, quote=F)
+write.table(coeff, file=paste0(diro, "/share/phen-cov-summary_cont_coeff.txt"), row.names=F, quote=F)
 
 # Save output files: Distribution of the phenotype, binary
-write.table(output2, file=paste0(diro, "/share/distribution/phen-cov-summary_bi.txt"), row.names=F, quote=F)
+write.table(output2, file=paste0(diro, "/share/phen-cov-summary_bi.txt"), row.names=F, quote=F)
 
 
 # Save output files: Remove outliers
 updated_dat1 <- updated_dat1 %>% dplyr::bind_rows(., .id="phen") %>% tidyr::spread(phen, pheno, fill=NA)
-write.csv(updated_dat1, file=paste0(diro, "/do_not_share/updated_phenotypes/updated_phenotype_reout.txt"), row.names=F, quote=F)
+write.table(updated_dat1, file=paste0(diro, "/do_not_share/updated_phenotypes/updated_phenotype_reout.txt"), row.names=F, quote=F)
 
 # Save output files: Covariate adjusted phenotype
 updated_dat2 <- updated_dat2 %>% dplyr::bind_rows(., .id="phen") %>% tidyr::spread(phen, resid_cov, fill=NA)
-write.csv(updated_dat2, file=paste0(diro, "/do_not_share/updated_phenotypes/updated_phenotype_covadj.txt"), row.names=F, quote=F)
+write.table(updated_dat2, file=paste0(diro, "/do_not_share/updated_phenotypes/updated_phenotype_covadj.txt"), row.names=F, quote=F)
 
 # Save output files: Covariate + medication adjusted phenotype
 updated_dat3 <- updated_dat3 %>% dplyr::bind_rows(., .id="phen") %>% tidyr::spread(phen, resid_med, fill=NA)
-write.csv(updated_dat3, file=paste0(diro, "/do_not_share/updated_phenotypes/updated_phenotype_cov_med_adj.txt"), row.names=F, quote=F)
+write.table(updated_dat3, file=paste0(diro, "/do_not_share/updated_phenotypes/updated_phenotype_cov_med_adj.txt"), row.names=F, quote=F)
 ```
 
 
@@ -281,7 +281,7 @@ for(i in cont){
  p_raw[[i]] <- ggplot(phen, aes(x=.data[[i]])) + 
               geom_histogram(aes(y=..density..), colour="black", fill="white") +
               geom_density(alpha=.2, fill="#FF6666") +
-              geom_vline(data=phen, aes(xintercept=mean(phen[[i]]), color="#E69F00"), linetype="dashed") +
+              geom_vline(data=phen, aes(xintercept=mean(phen[[i]]), color="#E69F00"), linetype="dashed", show.legend = F) +
               xlab(i) 
  
  p_out[[i]] <- ggplot(updated_dat1, aes(x=.data[[i]])) + 
@@ -296,7 +296,7 @@ for(i in cont){
               geom_vline(data=updated_dat2, aes(xintercept=mean(updated_dat2[[i]]), color="#E69F00"), linetype="dashed") +
               xlab(i) 
    
-p_med[[i]] <- ggplot(updated_dat3, aes(x=.data[[i]])) + 
+ p_med[[i]] <- ggplot(updated_dat3, aes(x=.data[[i]])) + 
               geom_histogram(aes(y=..density..), colour="black", fill="white") +
               geom_density(alpha=.2, fill="#FF6666") +
               geom_vline(data=updated_dat3, aes(xintercept=mean(updated_dat3[[i]]), color="#E69F00"), linetype="dashed") +
