@@ -266,7 +266,7 @@ Output will be stored in your_working_directory/output/share/plots.
 ```{r}
 
 # PC loading plots
-pdf(paste0(diro, "/share/plots/pc_loading.pdf"), width=6, height=3, onefile=TRUE)
+png(paste0(diro, "/share/plots/pc_loading.png"), width=8, height=7, units="in", res=300)
 pairs(pc[,2:7], col=c("black", "purple"))
 dev.off() 
 
@@ -287,19 +287,19 @@ for(i in cont){
  p_out[[i]] <- ggplot(updated_dat1, aes(x=.data[[i]])) + 
               geom_histogram(aes(y=..density..), colour="black", fill="white") +
               geom_density(alpha=.2, fill="#FF6666") +
-              geom_vline(data=updated_dat1, aes(xintercept=mean(updated_dat1[[i]]), color="#E69F00"), linetype="dashed") +
+              geom_vline(data=updated_dat1, aes(xintercept=mean(updated_dat1[[i]]), color="#E69F00"), linetype="dashed", show.legend = F) +
               xlab(i)
   
  p_cov[[i]] <- ggplot(updated_dat2, aes(x=.data[[i]])) + 
               geom_histogram(aes(y=..density..), colour="black", fill="white") +
               geom_density(alpha=.2, fill="#FF6666") +
-              geom_vline(data=updated_dat2, aes(xintercept=mean(updated_dat2[[i]]), color="#E69F00"), linetype="dashed") +
+              geom_vline(data=updated_dat2, aes(xintercept=mean(updated_dat2[[i]]), color="#E69F00"), linetype="dashed", show.legend = F) +
               xlab(i) 
    
  p_med[[i]] <- ggplot(updated_dat3, aes(x=.data[[i]])) + 
               geom_histogram(aes(y=..density..), colour="black", fill="white") +
               geom_density(alpha=.2, fill="#FF6666") +
-              geom_vline(data=updated_dat3, aes(xintercept=mean(updated_dat3[[i]]), color="#E69F00"), linetype="dashed") +
+              geom_vline(data=updated_dat3, aes(xintercept=mean(updated_dat3[[i]]), color="#E69F00"), linetype="dashed", show.legend = F) +
               xlab(i) 
 }
 
