@@ -79,7 +79,7 @@ Please edit the following paths and names:
 dir <- c("/Users/yc16575/bp-drug-mr/analysis/data_harmonization/data")
 diro <- c("/Users/yc16575/bp-drug-mr/analysis/data_harmonization/outputs") #e.g. "your-home-directory/bp-drug-mr/outputs"
 
-phen <- fread(paste0(dir, "/mrc_phenotypes_eur.txt"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
+phen <- fread(paste0(dir, "/mrc_phenotypes_noneur.txt"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
 cov <- fread(paste0(dir, "/mrc_covariates.txt"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
 pc <- fread(paste0(dir, "/mrc_pca.txt"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
 ```
@@ -221,8 +221,16 @@ output2 <- NULL
 bi <- c(bi, "med_hypertension", "med_ldlc")
 for (i in bi)
   {
+   phe <- phen %>% select("IID", i)
+   phe <- subset(phe, !is.na(phe[[i]]))
    dat <- merge(phe, cov, by="IID") %>% merge(., pc, by="IID")
 
+   if(i == "med_hypertension"){
+     dat <- dat %>% rename(med_hypertension = med_hypertension.x)}
+   if(i == "med_ldlc"){
+     dat <- dat %>% rename(med_ldlc = med_ldlc.x)
+   }
+     
    ncase <- nrow(subset(dat, dat[[i]]==1))
    ncontrol <- nrow(subset(dat, dat[[i]]==0))
 
