@@ -1,6 +1,7 @@
 # MRC network multi-ancestry drug MR
 
-Data generation and analysis
+Data generation and analysis.
+Detailed analysis plan is available in the sharepoint. Please contact Tom Gaunt or Gib Hemani for access.
 
 
 # Installation
