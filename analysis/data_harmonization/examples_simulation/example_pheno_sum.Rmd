@@ -8,98 +8,24 @@ date: "2022-09-08"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Script Prerequisites & Requirements
-
-The data requirements for the script are as follows:
-
-a) Phenotype data for one or more traits, e.g. SBP, DBP.
-
-Phenotype file format.
-
-* First column should be IID.
-* CSV format.
-* Rest of columns should contain available phenotypes, in any order, preferably labelled as follows in " ":
-"sbp", "dbp", "tc", "ldlc", "tg", "chd", "stroke", "hypertension"
-
-b) Complete covariate data such as age, and sex
-
-A covariate file should be provided satisfying the following requirements:
-
-* First column should be IID.
-* One column should contain age (years), defined as year of the survey minus YoB and labelled as "age".
-* One column should contain sex, labelled as "sex". Males should be coded as 1 and females as 0.
-* CSV format.
-
-c) Genomic principal components (~ 20 PCs)
-
-A PC file should be provided satisfying the following requirements:
-
-* First column should be IID.
-* Up to twenty columns containing the first 20 genomic principal components. Note that it is potentially possible to alter the primary analysis to include less principal components for computational efficiency.
-* Preferably labelled in capital letter.
-
-
 ```{r}
 # Library required packages
-library(data.table)
+suppressMessages(library(data.table))
 suppressMessages(library(dplyr))
+library(ggplot2)
+library(ggpubr)
 ```
 
 
 ## Editing working directory
 
-Directory to be edited with paths to relevant input files.
-Please edit the following paths and names:
-
-"set_working_dir"
-"phenotype.csv"
-"cov.csv"
-"pc.csv"
-
 ```{r}
 # change working directory to paths to relevant input files: Phenotype, Covariates, PC scores
-dir <- c("/Users/yc16575/bp-drug-mr/scripts/data_harmonization")
+dir <- c("/Users/yc16575/bp-drug-mr/analysis/data_harmonization/examples_simulation")
 setwd(dir)
 phen <- fread("phenotype.csv", header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
 cov <- fread("cov.csv", header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
 pc <- fread("pc.csv", header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
-```
-
-
-## Phenotype name
-
-Please define phenotype names if your phenotype file is not labelled as follows in " ":
-"sbp", "dbp", "tc", "ldlc", "tg", "chd", "stroke", "hypertension"
-
-Ignore this chunk if your phenotypes are labelled correctly.
-
-```r
-phen <- phen %>% 
-         rename(
-           sbp = your_column_name,
-           dbp = your_column_name,
-           tc = your_column_name,
-           ldlc = your_column_name,
-           tg = your_column_name,
-           chd = your_column_name,
-           stroke = your_column_name,
-           hypertension = your_column_name,
-         )
-```
-
-
-## Check the input files if neccesary 
-
-```r
-phen_name <- c("sbp", "dbp", "tc", "ldlc", "tg", "chd", "stroke", "hypertension")
-phen_check <- phen_name %in% names(phen)[-1]
-if (any(phen_check==FALSE))
-  {message(paste0("Please check the file includes all phenotype. The following phenotypes are missing: ", phen_name[!phen_check]))}
-
-cov_name <- c("age", "sex")
-cov_check <- cov_name %in% names(cov)[-1]
-if (any(cov_check==FALSE))
-  {message(paste0("Please check the file includes all phenotype. The following phenotypes are missing: ", cov_name[!cov_check]))}
 ```
 
 
@@ -111,85 +37,176 @@ For blood pressure (SBP, DBP) and LDL cholesterol, the following criteria will b
 message("Checking blood pressure phenotypes")
 out <- list()
 out$sbp <- subset(phen, phen$sbp<=20 | phen$sbp>=300)$IID
-message("The following individuals will be removed for SBP analyses:")
-print(out$sbp)
+message(paste0(length(out$sbp), " individuals will be removed for SBP analyses."))
 
 out$dbp <- subset(phen, phen$dbp<=5 | phen$dbp>=200)$IID
-message("The following individuals will be removed for DBP analyses:")
-print(out$dbp)
+message(paste0(length(out$dbp), " individuals will be removed for DBP analyses."))
 
 message("Checking lipid phenotypes")
 out$ldlc <- subset(phen, phen$tg>400)$IID
-message("The following individuals will be removed for LDLC analyses:")
-print(out$ldlc)
+message(paste0(length(out$ldlc), " individuals will be removed for LDLC analyses."))
 ```
 
 
 
 ## Summary of the phenotye distribution
 
-This script extracts summary level information on phenotypes and covariates (N, mean, median, min, max, Q1, Q3).
-Output will be stored in your_working_directory/phen-cov-summary.txt.
+This script extracts summary level information on phenotypes and covariates (N, mean, median, min, max, Q1, Q3, centile).
+Output will be stored in your_working_directory/output/~.
 
 ```{r}
+# Continuous phenotypes
 phen_name <- names(phen)[-1] 
-cont <- phen_name[phen_name %in% c("sbp", "dbp", "tc", "ldlc", "tg")]
+cont <- phen_name[phen_name %in% c("sbp", "dbp", "pp", "tc", "ldlc", "tg")]
 bi <- phen_name[phen_name %in% c("chd", "stroke", "hypertension")]
 
 output <- NULL
+coeff <- NULL
+updated_dat1 <- NULL
+updated_dat2 <- NULL
+updated_dat3 <- NULL
+
 for (i in cont)
   {
    phe <- phen %>% select("IID", i)
+   
+   phe <- subset(phe, !is.na(phe[[i]]))
+  
    if(i=="sbp"){phe <- subset(phe, !(IID %in% out$sbp))}
    if(i=="dbp"){phe <- subset(phe, !(IID %in% out$dbp))}
    if(i=="ldlc"){phe <- subset(phe, !(IID %in% out$ldlc))}
    
-   dat <- merge(phe, cov, by="IID") %>% merge(., pc, by="IID")
+   dat <- merge(phe, cov, by="IID") %>% merge(., pc, by="IID") 
    
    mean <- mean(phe[[i]], na.rm=T)
    sd <- sd(phe[[i]], na.rm=T)
    median <- median(phe[[i]], na.rm=T)
-   q1 <- as.numeric(summary(phe[[i]])[2])
-   q3 <- as.numeric(summary(phe[[i]])[5])
-   min <- as.numeric(summary(phe[[i]])[1])
-   max <- as.numeric(summary(phe[[i]])[6])
-   ncase <- NA
-   ncontrol <- NA
-  
+   min <- as.numeric(summary(phe[[i]])[1], na.rm=T)
+   max <- as.numeric(summary(phe[[i]])[6], na.rm=T)
+   q1 <- as.numeric(summary(phe[[i]])[2], na.rm=T)
+   q3 <- as.numeric(summary(phe[[i]])[5], na.rm=T)
+   c25 <- as.numeric(quantile(phe[[i]], probs = (0:100)/100, na.rm=T)[1])
+   c50 <- as.numeric(quantile(phe[[i]], probs = (0:100)/100, na.rm=T)[25])
+   c75 <- as.numeric(quantile(phe[[i]], probs = (0:100)/100, na.rm=T)[75])
+
    model1 <- lm(dat[[i]] ~ sex + age + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10
                           + PC11 + PC12 + PC13 + PC14 + PC15 + PC16 + PC17 + PC18 + PC19 + PC20, data = dat)
-   sd_resid <- sd(resid(model1))
- 
+   dat$resid_cov <- resid(model1)
+   sd_resid_cov <- sd(resid(model1))
+   coeff_cov <- coefficients(model1)
+   
+   dat <- dat %>% na.omit()
+   if(i=="sbp" | i=="dbp" | i=="pp")
+     {model2 <- lm(dat[[i]] ~ sex + age + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10
+                              + PC11 + PC12 + PC13 + PC14 + PC15 + PC16 + PC17 + PC18 + PC19 + PC20
+                              + med_hypertension, data = dat)
+      dat$resid_med <- resid(model2)
+      sd_resid_med <- sd(resid(model2))
+      coeff_med <- coefficients(model2)
+   }
+   
+    if(i=="ldlc" | i=="tg" | i=="tc")
+     {model2 <- lm(dat[[i]] ~ sex + age + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10
+                              + PC11 + PC12 + PC13 + PC14 + PC15 + PC16 + PC17 + PC18 + PC19 + PC20
+                              + med_ldlc, data = dat)
+      dat$resid_med <- resid(model2)
+      sd_resid_med <- sd(resid(model2))
+      coeff_med <- coefficients(model2)
+    }
+   
+   phenotype <- i
    N <- nrow(phe)
    
-   stats <- data.frame(i, N, mean, sd, sd_resid, median, min, max, q1, q3, ncase, ncontrol)
-   output<-rbind(output,stats)
-  }
+   stats <- data.frame(phenotype, N, mean, sd, sd_resid_cov, sd_resid_med, median, min, max, q1, q3)
+   output <-rbind(output,stats)
+   
+   co1 <- cbind(data.frame(phenotype), as.data.frame(t(coeff_cov))) %>% mutate(med_hypertension=NA, med_ldlc=NA, model = c("cov"))
+   if(i=="sbp" | i=="dbp" | i=="pp"){
+     co2 <- cbind(data.frame(phenotype), as.data.frame(t(coeff_med))) %>% mutate(med_hypertension=med_hypertension, med_ldlc=NA, model = c("cov+med"))
+   }
+   if(i=="ldlc" | i=="tg" | i=="tc"){
+     co2 <- cbind(data.frame(phenotype), as.data.frame(t(coeff_med))) %>% mutate(med_hypertension=NA, med_ldlc=med_ldlc, model = c("cov+med"))
+   }
+   
+   coeff <-rbind(coeff, co1, co2) 
+   
+   updated_dat1[[i]] <- phe %>% rename(pheno = i)
+   updated_dat2[[i]] <- subset(dat, select=c(IID, resid_cov))
+   updated_dat3[[i]] <- subset(dat, select=c(IID, resid_med))
 
+}
+```
+
+The outputs from the script above should look like:
+```{r}
+print(output)
+print(coeff)
+```
+
+
+```{r}
+# Binary phenotypes
 output2 <- NULL
+bi <- c(bi, "med_hypertension", "med_ldlc")
 for (i in bi)
   {
    phe <- phen %>% select("IID", i)
+   phe <- subset(phe, !is.na(phe[[i]]))
    dat <- merge(phe, cov, by="IID") %>% merge(., pc, by="IID")
-   
-   mean <- NA
-   sd <- NA
-   median <- NA
-   q1 <- NA
-   q3 <- NA
-   min <- NA
-   max <- NA
+
+   if(i == "med_hypertension"){
+     dat <- dat %>% rename(med_hypertension = med_hypertension.x)}
+   if(i == "med_ldlc"){
+     dat <- dat %>% rename(med_ldlc = med_ldlc.x)
+   }
+     
    ncase <- nrow(subset(dat, dat[[i]]==1))
    ncontrol <- nrow(subset(dat, dat[[i]]==0))
-   sd_resid <- NA
- 
+
+   phenotype <- i
    N <- nrow(phe)
    
-   stats <- data.frame(i, N, mean, sd, sd_resid, median, min, max, q1, q3, ncase, ncontrol)
+   stats <- data.frame(phenotype, N, ncase, ncontrol)
    output2<-rbind(output2,stats)
-  }
+}
+```
 
-print(rbind(output, output2))
+The outputs from the script above should look like:
+```{r}
+print(output2)
+```
 
-write.table(output, file="phen-cov-summary.txt", row.names=F, quote=F)
+
+## Plots
+This script return the following plots:
+
+* PC loading plots
+* Density plots for the phenotypes 
+
+Output will be stored in your_working_directory/output/share/plots.
+
+```{r}
+# PC loading plots
+#png(paste0(diro, "/share/plots/pc_loading.png"), width=8, height=7, units="in", res=300)
+pairs(pc[,2:7], col=c("black", "purple"))
+#dev.off() 
+
+# Plot the distribution
+ p_raw <- NULL
+ p_out <- NULL
+ p_cov <- NULL
+ p_med <- NULL
+ 
+for(i in cont){
+#raw phenotypes
+ p_raw[[i]] <- ggplot(phen, aes(x=.data[[i]])) + 
+              geom_histogram(aes(y=..density..), colour="black", fill="white") +
+              geom_density(alpha=.2, fill="#FF6666") +
+              geom_vline(data=phen, aes(xintercept=mean(phen[[i]]), color="#E69F00"), linetype="dashed", show.legend = F) +
+              xlab(i) 
+}
+
+#pdf(paste0(diro, "/share/plots/pheno_distribution_raw.pdf"))
+  ggarrange(plotlist=p_raw, nrow = 2, ncol = ceiling(length(cont)/2))
+#dev.off() 
 ```
