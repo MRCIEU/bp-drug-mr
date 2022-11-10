@@ -7,9 +7,8 @@ Detailed analysis plan is available in the sharepoint. Please contact Tom Gaunt 
 # Installation
 You can install the released / development version of scripts from GitHub with:
 
-```r
-install.packages("remotes")
-remotes::install_github("MRCIEU/bp-drug-mr")
+```
+git clone https://github.com/MRCIEU/bp-drug-mr.git
 ```
 
 # Example
