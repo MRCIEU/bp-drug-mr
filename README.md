@@ -1,15 +1,9 @@
-# MRC network multi-ancestry drug MR
+# MRC Network project
 
-Data generation and analysis.
-Detailed analysis plan is available in the sharepoint. Please contact Tom Gaunt or Gib Hemani for access.
+This repo has the code for the MRC network multi-ancestry drug MR project.
 
+## Organisation
 
-# Installation
-You can install the released / development version of scripts from GitHub with:
+- `data_generation` - use this folder for the per-study / per-ancestry phenotype harmonisation and GWAS analysis scripts
+- `analysis` - use this folder for the upstream and downstream analysis components of the project (e.g. using the GWAS results for downstream analysis)
 
-```
-git clone https://github.com/MRCIEU/bp-drug-mr.git
-```
-
-# Example
-Basic examples for each script are provided in the analysis directory.
