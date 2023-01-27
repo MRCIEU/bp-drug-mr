@@ -1,0 +1,362 @@
+---
+title: Phenotype scaling
+author: Gibran Hemani
+date: "`r Sys.Date()`"
+---
+
+The phenotype scales between two populations could differ based on
+
+1.  underlying processes that give rise to the phenotype
+2.  differences in ways of measuring the phenotype
+
+We want to preserve (1) but remove (2). How much bias might arise in GWAS / MR due to (2) and how much of (1) gets lost by trying to account for (2)?
+
+Starting points
+
+-   X has a different distribution in pop1 and pop2.
+
+-   X has a different effect on Y in pop1 and pop2
+
+-   X is measured differently in pop1 and pop2
+
+-   Relative or absolute effect?
+
+Example - lower absolute threshold of BMI for T2D in EAS than EUR
+
+```{r}
+library(dplyr)
+library(simulateGP)
+library(systemfit)
+library(ggplot2)
+n1 <- 10000
+g1 <- rbinom(n1, 2, 0.3)
+n2 <- 10000
+g2 <- rbinom(n2, 2, 0.7)
+
+x_m1 <- 20
+x_m2 <- 24
+x_sd1 <- 0.15
+x_sd2 <- 0.15
+# beta is percentage change from the mean
+b <- 1.05
+x1 <- x_m1 * b^g1 * rnorm(n1, mean=1, sd=x_sd1)
+x2 <- x_m2 * b^g2 * rnorm(n2, mean=1, sd=x_sd2)
+hist(x1)
+hist(x2)
+sd(x1)
+sd(x2)
+```
+
+```{r}
+summary(lm(x1 ~ g1))
+```
+
+```{r}
+summary(lm(x2 ~ g2))
+```
+
+```{r}
+library(simulateGP)
+bxy <- 0.1
+p1 <- gx_to_gp(scale(x1), 0.3, pnorm(1, low=T))
+y1 <- rbinom(n1, 1, p1)
+prop.table(table(y1))
+risk_cross_plot(x1, p1)
+```
+
+```{r}
+p2 <- gx_to_gp(scale(x2), 0.3, pnorm(1, low=T))
+y2 <- rbinom(n2, 1, p2)
+prop.table(table(y2))
+risk_cross_plot(x2, p2)
+```
+
+```{r}
+tapply(x1, y1, mean)
+```
+
+```{r}
+tapply(x2, y2, mean)
+```
+
+```{r}
+bind_rows(
+  summary(glm(y1 ~ x1, family="binomial"))$coef[2,1:2] %>% as.list() %>% as_tibble() %>% mutate(pop=1, mod="glm(y ~ x)"),
+  summary(glm(y2 ~ x2, family="binomial"))$coef[2,1:2] %>% as.list() %>% as_tibble() %>% mutate(pop=2, mod="glm(y ~ x)"),
+  summary(lm(y1 ~ x1))$coef[2,1:2] %>% as.list() %>% as_tibble() %>% mutate(pop=1, mod="lm(y ~ x)"),
+  summary(lm(y2 ~ x2))$coef[2,1:2] %>% as.list() %>% as_tibble() %>% mutate(pop=2, mod="lm(y ~ x)"),
+  summary(lm(x1 ~ g1))$coef[2,1:2] %>% as.list() %>% as_tibble() %>% mutate(pop=1, mod="lm(x ~ g)"),
+  summary(lm(x2 ~ g2))$coef[2,1:2] %>% as.list() %>% as_tibble() %>% mutate(pop=2, mod="lm(x ~ g)"),
+  summary(glm(y1 ~ g1, family="binomial"))$coef[2,1:2] %>% as.list() %>% as_tibble() %>% mutate(pop=1, mod="glm(y ~ g)"),
+  summary(glm(y2 ~ g2, family="binomial"))$coef[2,1:2] %>% as.list() %>% as_tibble() %>% mutate(pop=2, mod="glm(y ~ g)")
+) %>% relocate(mod, pop)
+```
+
+MR
+
+```{r}
+bind_rows(
+  summary(systemfit(y1 ~ x1, inst=~ g1, method="2SLS"))$coefficients[2,1:2],
+  summary(systemfit(y2 ~ x2, inst=~ g2, method="2SLS"))$coefficients[2,1:2] 
+)
+
+```
+
+Link function
+
+```{r}
+fn <- function(b)
+{
+  n <- 10000
+  x <- rnorm(n)
+  y <- rbinom(n, 1, plogis(b * x))
+  sum(y==1)/n
+}
+
+tibble(
+  b=seq(-1,1,by=0.1),
+  p=sapply(b,fn)
+) %>%
+  plot()
+
+
+```
+
+```{r}
+g1 <- rbinom(n1, 2, 0.5)
+x1 <- g1 + rnorm(n1)
+e1 <- rbinom(n1, 1, 0.8)
+y1 <- x1 + e1 + x1 * e1 + rnorm(n1, sd=1)
+systemfit(y1 ~ x1, inst= ~ g1, method="2SLS")
+```
+
+```{r}
+g2 <- rbinom(n2, 2, 0.5)
+x2 <- g2 + rnorm(n2)
+e2 <- rbinom(n2, 0, 0.8)
+y2 <- x2 + e2 + x2 * e2 + rnorm(n2, sd=1)
+systemfit(y2 ~ x2, inst= ~ g2, method="2SLS")
+```
+
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4220271/pdf/nihms637400.pdf
+
+https://academic.oup.com/ije/article/48/1/268/5066378
+
+Simulate g -\> x\*z -\> y
+
+Allow variance of m to vary across phenotypes
+
+Have different scales for x and y
+
+```{r}
+org_coef <- function(fit, pop, mod)
+{
+  fit$coefficients[2,1:2] %>% as.list() %>% as_tibble() %>% mutate(pop=pop, mod=mod)
+}
+
+tsls_glm <- function(y, x, g)
+{
+  xhat <- fitted.values(lm(x ~ g))
+  mod2 <- glm(y ~ xhat, family="binomial")
+  summary(mod2)
+}
+
+tsmr <- function(y, x, g)
+{
+  get_effs(x,y,as.matrix(g)) %>% recode_dat %>% TwoSampleMR::mr() %>%
+    {bind_rows(tibble(1), .)} %>%
+    select(Estimate=b, `Std. Error` = se) %>% {list(coefficients=.)}
+}
+
+irnt <- function(x)
+{
+  qnorm((rank(x, na.last = "keep") - 0.5) / sum(!is.na(x)))
+}
+
+estimates <- function(y1, y2, x1, x2, g1, g2)
+{
+  bind_rows(
+    summary(glm(y1 ~ x1, family="binomial")) %>% org_coef(pop=1, mod="glm(y ~ x)"),
+    summary(glm(y2 ~ x2, family="binomial")) %>% org_coef(pop=2, mod="glm(y ~ x)"),
+    summary(lm(y1 ~ x1)) %>% org_coef(pop=1, mod="lm(y ~ x)"),
+    summary(lm(y2 ~ x2)) %>% org_coef(pop=2, mod="lm(y ~ x)"),
+    summary(lm(x1 ~ g1)) %>% org_coef(pop=1, mod="lm(x ~ g)"),
+    summary(lm(x2 ~ g2)) %>% org_coef(pop=2, mod="lm(x ~ g)"),
+    summary(glm(y1 ~ g1, family="binomial")) %>% org_coef(pop=1, mod="glm(y ~ g)"),
+    summary(glm(y2 ~ g2, family="binomial")) %>% org_coef(pop=2, mod="glm(y ~ g)"),
+    summary(systemfit(y1 ~ x1, inst=~ g1, method="2SLS")) %>% org_coef(pop=1, mod="lm 2sls"),
+    summary(systemfit(y2 ~ x2, inst=~ g2, method="2SLS")) %>% org_coef(pop=2, mod="lm 2sls"),
+    tsls_glm(y1, x1, g1) %>% org_coef(pop=1, mod="glm 2sls"),
+    tsls_glm(y2, x2, g2) %>% org_coef(pop=2, mod="glm 2sls"),
+    tsls_glm(y1, scale(x1), g1) %>% org_coef(pop=1, mod="glm 2sls scale(x)"),
+    tsls_glm(y2, scale(x2), g2) %>% org_coef(pop=2, mod="glm 2sls scale(x)"),
+    tsls_glm(y1, irnt(x1), g1) %>% org_coef(pop=1, mod="glm 2sls irnt(x)"),
+    tsls_glm(y2, irnt(x2), g2) %>% org_coef(pop=2, mod="glm 2sls irnt(x)"),
+    tsmr(y1, x1, g1) %>% org_coef(pop=1, mod="2smr"),
+    tsmr(y2, x2, g2) %>% org_coef(pop=2, mod="2smr"),
+    tsmr(y1, scale(x1), g1) %>% org_coef(pop=1, mod="2smr scale(x)"),
+    tsmr(y2, scale(x2), g2) %>% org_coef(pop=2, mod="2smr scale(x)"),
+    tsmr(y1, irnt(x1), g1) %>% org_coef(pop=1, mod="2smr irnt(x)"),
+    tsmr(y2, irnt(x2), g2) %>% org_coef(pop=2, mod="2smr irnt(x)")
+  ) %>% relocate(mod, pop)
+}
+
+plot_estimates <- function(x)
+{
+  ggplot(x, aes(y=Estimate, x=mod, group=as.factor(pop))) +
+  geom_point(aes(colour=as.factor(pop)), position=position_dodge(width=0.3)) +
+  geom_errorbar(aes(colour=as.factor(pop), ymin=Estimate - 1.96*`Std. Error`, ymax = Estimate + 1.96*`Std. Error`), position=position_dodge(width=0.3), width=0) +
+  coord_flip()
+}
+
+```
+
+```{r}
+n1 <- 100000
+g1 <- rbinom(n1, 2, 0.3)
+n2 <- 100000
+g2 <- rbinom(n2, 2, 0.7)
+
+x_m1 <- 20
+x_m2 <- 24
+x_sd1 <- 0.15
+x_sd2 <- 0.15
+# beta is percentage change from the mean
+b <- 1.05
+x1 <- x_m1 * b^g1 * rnorm(n1, mean=1, sd=x_sd1)
+x2 <- x_m2 * b^g2 * rnorm(n2, mean=1, sd=x_sd2)
+bxy <- 0.1
+p1 <- gx_to_gp(scale(x1), 0.3, pnorm(1, low=T))
+y1 <- rbinom(n1, 1, p1)
+p2 <- gx_to_gp(scale(x2), 0.3, pnorm(1, low=T))
+y2 <- rbinom(n2, 1, p2)
+
+estimates(y1, y2, x1, x2, g1, g2) %>%
+  plot_estimates()
+```
+
+-   If the exposure has a relative effect on the outcome, and the exposure means are different across populations, we'll get different effect estimates on the absolute scale.
+
+-   When normalising (scale or irnt) the relationship flips for glm 2sls - pop2 previously had a smaller effect, and now has a bigger effect. This doesn't seem to happen for 2smr.
+
+What if the prevalences are different but the exposures are the same. Changing the prevalence involves asking what level of exposure is required for the disease threshold. This is a form of sensitivity to the exposure and could be considered a biological difference rather than an artefactual difference.
+
+```{r}
+n1 <- 10000
+g1 <- rbinom(n1, 2, 0.3)
+n2 <- 10000
+g2 <- rbinom(n2, 2, 0.7)
+
+x_m1 <- 24
+x_m2 <- 24
+x_sd1 <- 0.15
+x_sd2 <- 0.15
+# beta is percentage change from the mean
+b <- 1.05
+x1 <- x_m1 * b^g1 * rnorm(n1, mean=1, sd=x_sd1)
+x2 <- x_m2 * b^g2 * rnorm(n2, mean=1, sd=x_sd2)
+bxy <- 0.1
+p1 <- gx_to_gp(scale(x1), 0.3, pnorm(2, low=T))
+y1 <- rbinom(n1, 1, p1)
+p2 <- gx_to_gp(scale(x2), 0.3, pnorm(1, low=T))
+y2 <- rbinom(n2, 1, p2)
+
+prop.table(table(y1))
+prop.table(table(y2))
+
+estimates(y1, y2, x1, x2, g1, g2) %>%
+  plot_estimates()
+```
+
+-   Pop2 has a 2x higher sensitivity to the exposure and the so the 2SMR effect estimate is 2x higher.
+
+-   Strange that the observational associations go the other way (no confounding here)
+
+Changing scales on exposure and outcome..
+
+```{r}
+
+fn <- function()
+{
+  n1 <- 10000
+  g1 <- rbinom(n1, 2, 0.3)
+  n2 <- 10000
+  g2 <- rbinom(n2, 2, 0.7)
+  
+  x_m1 <- 24
+  x_m2 <- 20
+  x_sd1 <- 0.15
+  x_sd2 <- 0.15
+  # beta is percentage change from the mean
+  b <- 1.05
+  x1 <- x_m1 * b^g1 * rnorm(n1, mean=1, sd=x_sd1)
+  x2 <- x_m2 * b^g2 * rnorm(n2, mean=1, sd=x_sd2)
+  bxy <- 0.1
+  p1 <- gx_to_gp(scale(x1), 0.3, pnorm(1, low=T))
+  y1 <- rbinom(n1, 1, p1)
+  p2 <- gx_to_gp(scale(x2), 0.3, pnorm(1, low=T))
+  y2 <- rbinom(n2, 1, p2)
+  estimates(y1, y2, x1, x2, g1, g2)  
+}
+
+fn() %>%
+  plot_estimates()
+
+
+```
+
+At this stage we could investigate whether transformations using https://bmcmedresmethodol.biomedcentral.com/articles/10.1186/s12874-017-0322-8/tables/1 would be able to rescue the effect estimates. However, it seems to me that the differences are not that drastically different, and it's probably possible to investigate whether any empirical differences can be explained by scale differences through these types of simulations.
+
+## Does normalisation remove real GxE effects?
+
+Supppose there are real differences between cohorts, in addition to scale differences. What happens when we normalise?
+
+```{r}
+fn <- function(z_m1, z_m2, z_sd1, z_sd2, x_m1=24, x_m2=24)
+{
+  n1 <- 10000
+  g1 <- rbinom(n1, 2, 0.3)
+  n2 <- 10000
+  g2 <- rbinom(n2, 2, 0.7)
+  x_sd1 <- 0.15
+  x_sd2 <- 0.15
+  z1 <- rnorm(n1, z_m1, z_sd1)
+  z2 <- rnorm(n2, z_m2, z_sd2)
+  # beta is percentage change from the mean
+  b <- 1.05
+  x1 <- x_m1 * b^g1 * rnorm(n1, mean=1, sd=x_sd1)
+  x2 <- x_m2 * b^g2 * rnorm(n2, mean=1, sd=x_sd2)
+  bxy <- 0.1
+  p1 <- gx_to_gp(scale(x1 + x1 * z1), 0.3, pnorm(1, low=T))
+  y1 <- rbinom(n1, 1, p1)
+  p2 <- gx_to_gp(scale(x2 + x2 * z2), 0.3, pnorm(1, low=T))
+  y2 <- rbinom(n2, 1, p2)
+  estimates(y1, y2, x1, x2, g1, g2) %>% 
+    #filter(mod %in% c("2smr", "2smr irnt(x)")) %>%
+    group_by(mod) %>%
+    mutate(
+      z = (Estimate[1] - Estimate[2]) / sqrt(`Std. Error`[1]^2 + `Std. Error`[2]^2),
+      pdiff = pnorm(abs(z), low=F)
+    ) %>%
+    ungroup()
+}
+
+fn(0, 5, 1, 1) %>% filter(!grepl(" ~ g", mod))
+
+o <- expand.grid(z_m1=c(0, 5), z_m2=c(0,5), z_sd1=c(1, 5), z_sd2=c(1,5), x_m1=25, x_m2=20) %>%
+  apply(., 1, function(x) {
+    do.call(fn, as.list(x)) %>% bind_cols(., as_tibble(as.list(x)))
+  }) %>% bind_rows()
+o
+
+bind_rows(o) %>%
+  mutate(mdiff=z_m1-z_m2, sddiff=z_sd1-z_sd2) %>%
+  filter(grepl("2s", mod) & pop==1) %>%
+  ggplot(., aes(x=mod, y=-log10(pdiff))) +
+  geom_point() +
+  facet_grid(paste(z_m1, z_m2) ~ paste(z_sd1, z_sd2)) +
+  theme(axis.text.x=element_text(angle=90))
+
+```
+
+Different transformations don't make a big difference here in being able to detect a differential effect due to GxE
