@@ -1,0 +1,202 @@
+---
+title: "Genome-wide association analyses implemented using the SAIGE software"
+output: html_document
+date: "03-02-2023"
+---
+
+#################################
+##Step 1: Create sparse GRM #####
+#################################
+
+#!/bin/bash
+#SBATCH --job-name=sparse_grm
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=4
+#SBATCH --time=48:00:00
+#SBATCH --mem=100000M
+#SBATCH --partition=mrcieu
+#SBATCH --account=smed001801
+
+module add apps/gcta/1.94
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 1 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 2 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 3 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 4 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 5 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 6 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 7 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 8 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 9 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 10 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 11 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 12 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 13 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 14 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 15 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 16 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 17 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 18 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 19 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 20 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 21 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+gcta64 \
+     --bfile /mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-$
+     --make-grm-part 22 22 \
+     --maf 0.01 \
+     --geno 0.15 \
+     --thread-num 2 \
+     --out /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM
+
+# Merge all the parts together (Linux, Mac)
+cat /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM.part_3_*.grm.id > test.grm.id
+cat /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM.part_3_*.grm.bin > test.grm.bin
+cat /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/sparseGRM.part_3_*.grm.N.bin > test.grm.N.bin
+
+
