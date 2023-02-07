@@ -1,0 +1,96 @@
+---
+title: "Genome-wide association analyses implemented using the REGENIE software"
+output: html_document
+date: "02-02-2023"
+---
+
+#!/bin/bash
+#SBATCH --job-name=qc
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=4
+#SBATCH --time=48:00:00
+#SBATCH --mem=16G
+#SBATCH --partition=mrcieu,compute
+
+# do step one - have to do this across whole genome
+
+
+#UKB_MERGED=/mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-04/data/derived/merged_chr1-22
+#UKBIOBANK_DATA=/mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/imputed/released/2018-09-18/data/dosage_bgen
+#DIR=/projects/MRC-IEU/research/projects/ieu2/p4/080/working/data/data_harmonization/UKB 
+#DIRO=/projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/REGENIE
+
+
+UKB_MERGED=//bp1/mrcieu1/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-04/data/derived/merged_chr1-22
+UKBIOBANK_DATA=/bp1/mrcieu1/data/ukbiobank/genetic/variants/arrays/imputed/released/2018-09-18/data/dosage_bgen
+DIR=/projects/MRC-IEU/research/projects/ieu2/p4/080/working/data/data_harmonization/UKB 
+DIRO=/projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/REGENIE
+
+# NEED TO HAVE INSTALLED regenie via conda - follow their instructions
+conda activate regenie_env
+
+
+regenie \
+  --step 1 \
+  --bed $UKB_MERGED/chr1-22_merged \
+  --covarFile \$DIR/mrc_covariates_pca.txt \
+  --phenoFile /projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/data_harmonization/UKB/outputs/do_not_share/updated_phenotypes/AFR/mrc_phenotypes_afr_int.txt \  
+  --covarCol age,sex,PC{1:20} \
+  --bsize 1000 \
+  # --bt --cc12\ important to check binary type
+  --out \$DIRO/covariate \
+  --gz
+  
+for chr in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22; 
+
+do echo "chr${chr}" 
+
+cat > $chr.sh <<'endmsg'
+#!/bin/bash
+#SBATCH --job-name=${chr}
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --time=8:00:00
+#SBATCH --mem=16G
+#SBATCH --partition=mrcieu,compute
+
+
+
+# UKB_MERGED=/mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-04/data/derived/merged_chr1-22
+# UKBIOBANK_DATA=/mnt/storage/private/mrcieu/data/ukbiobank/genetic/variants/arrays/imputed/released/2018-09-18/data/dosage_bgen
+# DIR=/projects/MRC-IEU/research/projects/ieu2/p4/080/working/data/data_harmonization/UKB 
+# DIRO=/projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/REGENIE
+
+
+
+UKB_MERGED=//bp1/mrcieu1/data/ukbiobank/genetic/variants/arrays/directly_genotyped/released/2017-07-04/data/derived/merged_chr1-22
+UKBIOBANK_DATA=/bp1/mrcieu1/data/ukbiobank/genetic/variants/arrays/imputed/released/2018-09-18/data/dosage_bgen
+DIR=/projects/MRC-IEU/research/projects/ieu2/p4/080/working/data/data_harmonization/UKB
+DIRO=/projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS/UKB/AFR/REGENIE
+
+#cd /user/work/fh6520/regenie/regenie-master/
+conda init bash
+conda activate regenie_env
+endmsg
+
+
+echo >> $chr.sh
+
+echo "regenie \
+  --step 2 \
+  --bgen \$UKBIOBANK_DATA/data.chr$chr.bgen \
+  --sample \$UKBIOBANK_DATA/data.chr1-22.sample  \
+  --pred \$DIRO/covariate/covariate_pred.list\ 
+  --ref-first \
+  --minMAC 100 \
+  --covarFile $DIR/mrc_covariates.txt \
+  --phenoFile \projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/data_harmonization/UKB/outputs/do_not_share/updated_phenotypes/AFR/mrc_phenotypes_afr_int.txt \
+  --covarCol age,sex,PC{1:20} \
+  --bsize 400 \
+  --out \$DIRO/UKB_$chr \
+  --gz" >>  $chr.sh ;
+
+sbatch $chr.sh
+chmod +x $chr.sh
+done
