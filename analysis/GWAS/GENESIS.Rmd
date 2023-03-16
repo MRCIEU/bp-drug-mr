@@ -44,6 +44,7 @@ dir_con <- c("/projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/da
 dir_bi <- c("/projects/MRC-IEU/research/projects/ieu2/p4/080/working/data/data_harmonization/UKB") #Directory to binary phenotype of interest input 
 dir <- c("/projects/MRC-IEU/research/projects/ieu2/p4/080/working/data/GWAS")
 diro <- c("/projects/MRC-IEU/research/projects/ieu2/p4/080/working/results/GWAS") #e.g. "your-home-directory/bp-drug-mr/outputs"
+
 phen_con <- fread(paste0(dir_con, "/EAS/mrc_phenotypes_eas_int.txt"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
 phen_bi <- fread(paste0(dir_bi, "mrc_phenotypes_eas.txt"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
 cov <- fread(paste0("/projects/MRC-IEU/research/projects/ieu2/p4/080/working/data/data_harmonization/UKB/mrc_covariates.txt"), header=T, fill = T, na.strings = c("", NA), data.table = F, stringsAsFactors = FALSE)
