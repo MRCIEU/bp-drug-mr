@@ -199,7 +199,7 @@ for (i in cont)
    phenotype <- i
    N <- nrow(phe)
    
-   stats <- data.frame(phenotype, N, mean, sd, sd_resid_cov, sd_resid_med, median, min, max, q1, q3)
+   stats <- data.frame(phenotype, N, mean, sd, sd_resid_cov, sd_resid_med, median, min, max, q1, q3, c25, c50, c75)
    output <-rbind(output,stats)
    
    co1 <- cbind(data.frame(phenotype), as.data.frame(t(coeff_cov))) %>% mutate(med_hypertension=NA, med_ldlc=NA, model = c("cov"))
