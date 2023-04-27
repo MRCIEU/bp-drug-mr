@@ -252,15 +252,15 @@ write.table(output2, file=paste0(diro, "/share/phen-cov-summary_bi.txt"), row.na
 
 
 # Save output files: Remove outliers
-updated_dat1 <- updated_dat1 %>% dplyr::bind_rows(., .id="phen") %>% tidyr::spread(phen, pheno, fill=NA)
+updated_dat1 <- updated_dat1 %>% dplyr::bind_rows(., .id="phen") %>% tidyr::spread(updated_dat1, phen, pheno, fill=NA)
 write.table(updated_dat1, file=paste0(diro, "/do_not_share/updated_phenotypes/updated_phenotype_reout.txt"), row.names=F, quote=F)
 
 # Save output files: Covariate adjusted phenotype
-updated_dat2 <- updated_dat2 %>% dplyr::bind_rows(., .id="phen") %>% tidyr::spread(phen, resid_cov, fill=NA)
+updated_dat2 <- updated_dat2 %>% dplyr::bind_rows(., .id="phen") %>% tidyr::spread(updated_dat2, phen, resid_cov, fill=NA)
 write.table(updated_dat2, file=paste0(diro, "/do_not_share/updated_phenotypes/updated_phenotype_covadj.txt"), row.names=F, quote=F)
 
 # Save output files: Covariate + medication adjusted phenotype
-updated_dat3 <- updated_dat3 %>% dplyr::bind_rows(., .id="phen") %>% tidyr::spread(phen, resid_med, fill=NA)
+updated_dat3 <- updated_dat3 %>% dplyr::bind_rows(., .id="phen") %>% tidyr::spread(updated_dat3, phen, resid_med, fill=NA)
 write.table(updated_dat3, file=paste0(diro, "/do_not_share/updated_phenotypes/updated_phenotype_cov_med_adj.txt"), row.names=F, quote=F)
 ```
 
