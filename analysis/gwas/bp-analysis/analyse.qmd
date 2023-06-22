@@ -1,0 +1,156 @@
+---
+title: Cross-ancestry analysis of blood pressure GWASs
+---
+
+## Outline
+
+1. `organise_data.r` extracts Gill derived SBP regions from each population
+2. Estimate Cochrane's Q for each SNP across populations to identify any SNPs that have differential effects
+3. 
+
+
+
+Load organised data
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+ex <- readRDS("data/pop_extract_clumped.rds")
+pops <- c("afr", "eas", "eur", "sas", "ugr")
+```
+
+Define heterogeneity test
+
+```{r}
+
+
+## Heterogeneity analysis
+
+fixed_effects_meta_analysis <- function(beta_vec, se_vec) {
+    w <- 1 / se_vec^2
+    beta <- sum(beta_vec * w) / sum(w)
+    se <- sqrt(1 / sum(w))
+    pval <- pnorm(abs(beta / se), lower.tail = FALSE)
+    Qj <- w * (beta-beta_vec)^2
+    Q <- sum(Qj)
+    Qdf <- length(beta_vec)-1
+    Qjpval <- pchisq(Qj, 1, lower.tail=FALSE)
+    Qpval <- pchisq(Q, Qdf, lower.tail=FALSE)
+    return(list(beta=beta, se=se, Qpval=Qpval, Qj=Qj, Qjpval=Qjpval))
+}
+# fixed_effects_meta_analysis(c(1,2,3), c(0.3, 0.3, 0.3))
+# fixed_effects_meta_analysis(c(1,1,1), c(0.3, 0.3, 0.3))
+
+#' Test for heterogeneity of effect estimates between populations
+#' 
+#' @description For each SNP this function will provide a Cochran's Q test statistic - a measure of heterogeneity of effect sizes between populations. A low p-value means high heterogeneity.
+#' In addition, for every SNP it gives a per population p-value - this can be interpreted as asking for each SNP is a particular giving an outlier estimate.
+#' 
+#' @param sslist Named list of data frames, one for each population, with at least beta, se and snp columns
+#' 
+#' @return List
+#' - Q = vector of p-values for Cochrane's Q statistic for each SNP
+#' - Qj = Data frame of per-population outlier q values for each SNP
+heterogeneity_test <- function(sslist) {
+    b <- lapply(sslist, \(x) x$beta) %>% bind_cols
+    se <- lapply(sslist, \(x) x$se) %>% bind_cols
+    o <- lapply(1:nrow(b), \(i) {
+        fixed_effects_meta_analysis(as.numeric(b[i,]), as.numeric(se[i,]))
+    })
+    Q <- tibble(rsid = sslist[[1]]$rsid, Qpval = sapply(o, \(x) x$Qpval))
+    Qj <- lapply(o, \(x) x$Qjpval) %>% do.call(rbind, .) %>% 
+        as_tibble()
+    names(Qj) <- names(sslist)
+    Qj$rsid <- sslist[[1]]$rsid
+    return(list(Q=Q, Qj=Qj))
+}
+```
+
+
+
+```{r}
+exl <- lapply(pops, \(x) subset(ex, pop==x))
+names(exl) <- pops
+
+o <- heterogeneity_test(exl)
+
+ex %>%
+    group_by(pop) %>%
+    summarise(minp=min(pval), n=max(n, na.rm=T))
+
+p <- ex %>%
+ggplot(., aes(x=beta, y=pop)) +
+geom_point(aes(colour=pop)) +
+geom_errorbarh(aes(colour=pop, xmin=beta-se*1.96, xmax=beta+se*1.96), height=0) +
+facet_grid(snpid ~ .) +
+geom_vline(xintercept=0, linetype="dotted")
+ggsave(p, file="results/fp.pdf", width=8, height=60, limitsize=FALSE)
+```
+
+
+
+
+```{r}
+
+## MR
+
+a <- subset(ex, pop=="eur")
+b <- subset(ex, pop != "eur")
+ab <- inner_join(a, b, by="snpid") %>% filter(pval.x < 5e-8)
+
+lapply(unique(ab$pop.y), function(p){
+    x <- subset(ab, pop.y==p)
+    summary(lm(beta.x ~ 0 + beta.y, data=x, weight=1/se.y^2))$coef
+})
+
+
+## expected vs observed
+
+#' Expected vs observed replication rates
+#' 
+#' @description For a set of effects that have discovery and replication betas and SEs, this function determines the extent to which the observed replication rate matches the expected replication rate. 
+#' The expected replication rate is based on the assumption that the replication dataset has the same effect sizes but that the power may be different (e.g. due to allele frequencies or sample sizes) and is reflected in the replication standard errors. 
+#' It assesses replication based on concordance of effect direction across discovery and replication, and p-values surpassing a user-specified p-value threshold.
+#' 
+#' @param b_disc vector of clumped incidence hit effects
+#' @param se_disc the standard errors for incidence effects
+#' @param b_rep corresponding vector of associations in progression
+#' @param se_rep standard errors of effects in progression
+#' @param alpha p-value threshold to check for replication of incidence hits in progression (e.g. try 0.05 or 1e-5)
+expected_vs_observed_replication <- function(b_disc, b_rep, se_disc, se_rep, alpha)
+{
+    p_sign <- pnorm(-abs(b_disc) / se_disc) * pnorm(-abs(b_disc) / se_rep) + ((1 - pnorm(-abs(b_disc) / se_disc)) * (1 - pnorm(-abs(b_disc) / se_rep)))
+    p_sig <- pnorm(-abs(b_disc) / se_rep + qnorm(alpha / 2)) + (1 - pnorm(-abs(b_disc) / se_rep - qnorm(alpha / 2)))
+    p_rep <- pnorm(abs(b_rep)/se_rep, lower.tail=FALSE)
+    res <- tibble::tibble(
+        nsnp=length(b_disc),
+        metric=c("Sign", "Sign", "P-value", "P-value"),
+        datum=c("Expected", "Observed", "Expected", "Observed"),
+        value=c(sum(p_sign, na.rm=TRUE), sum(sign(b_disc) == sign(b_rep)), sum(p_sig, na.rm=TRUE), sum(p_rep < alpha, na.rm=TRUE)),
+        pdiff=c(NA_real_, binom.test(value[2], nsnp[2], value[1]/nsnp[2])$p.value, NA_real_, binom.test(value[4], nsnp[4], value[3]/nsnp[4])$p.value)
+    )
+    res_per_variant <- tibble(
+        expected_pval = p_sig,
+        observed_pval = p_rep < alpha,
+        replication_fail = expected_pval > 0.95 & ! observed_pval,
+        expected_sign = p_sign,
+        observed_sign = sign(b_disc) == sign(b_rep),
+        sign_fail = expected_sign > 0.95 & ! observed_sign
+    )
+    return(list(res=res, variants=res_per_variant))
+}
+
+
+eores <- lapply(unique(ab$pop.y), function(p){
+    x <- subset(ab, pop.y==p)
+    o <- expected_vs_observed_replication(x$beta.x, x$beta.y, x$se.x, x$se.y, 0.05)
+    o$res$pop <- p
+    o$variants$pop <- p
+    return(o)
+})
+
+lapply(eores, \(x) x$res) %>% bind_rows() %>% subset(metric=="Sign") %>% dplyr::select(pop, nsnp, datum, value, pdiff)
+
+lapply(eores, \(x) x$variants) %>% bind_rows() %>% filter(sign_fail)
+```
