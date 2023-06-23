@@ -1,5 +1,9 @@
 ---
 title: Cross-ancestry analysis of blood pressure GWASs
+date: '2023-06-23'
+format:
+  html:
+    embed-resources: true
 ---
 
 ## Outline
@@ -20,27 +24,42 @@ ex <- readRDS("data/pop_extract_clumped.rds")
 pops <- c("afr", "eas", "eur", "sas", "ugr")
 ```
 
+How much signal is there amongst the different populations (i.e. what is the lowest p-value per population amongst the selected SNPs)
+
+```{r}
+ex %>%
+    group_by(pop) %>%
+    summarise(minp=min(pval), n=max(n, na.rm=T))
+```
+
+Not much signal beyond the European data.
+
 Define heterogeneity test
 
 ```{r}
 
 
 ## Heterogeneity analysis
-
+# TODO - allow 
 fixed_effects_meta_analysis <- function(beta_vec, se_vec) {
     w <- 1 / se_vec^2
-    beta <- sum(beta_vec * w) / sum(w)
-    se <- sqrt(1 / sum(w))
+    beta <- sum(beta_vec * w, na.rm=T) / sum(w, na.rm=T)
+    se <- sqrt(1 / sum(w, na.rm=T))
     pval <- pnorm(abs(beta / se), lower.tail = FALSE)
     Qj <- w * (beta-beta_vec)^2
-    Q <- sum(Qj)
-    Qdf <- length(beta_vec)-1
+    Q <- sum(Qj, na.rm=T)
+    Qdf <- sum(!is.na(beta_vec))-1
+    if(Qdf == 0) Q <- 0
     Qjpval <- pchisq(Qj, 1, lower.tail=FALSE)
     Qpval <- pchisq(Q, Qdf, lower.tail=FALSE)
-    return(list(beta=beta, se=se, Qpval=Qpval, Qj=Qj, Qjpval=Qjpval))
+    return(list(beta=beta, se=se, Q=Q, Qdf=Qdf, Qpval=Qpval, Qj=Qj, Qjpval=Qjpval))
 }
+
+# check
+# fixed_effects_meta_analysis(c(1,2,3), c(0.3, 0.3, 0.3))
 # fixed_effects_meta_analysis(c(1,2,3), c(0.3, 0.3, 0.3))
 # fixed_effects_meta_analysis(c(1,1,1), c(0.3, 0.3, 0.3))
+# fixed_effects_meta_analysis(c(1,1,NA), c(0.3, 0.3, NA))
 
 #' Test for heterogeneity of effect estimates between populations
 #' 
@@ -53,58 +72,100 @@ fixed_effects_meta_analysis <- function(beta_vec, se_vec) {
 #' - Q = vector of p-values for Cochrane's Q statistic for each SNP
 #' - Qj = Data frame of per-population outlier q values for each SNP
 heterogeneity_test <- function(sslist) {
-    b <- lapply(sslist, \(x) x$beta) %>% bind_cols
-    se <- lapply(sslist, \(x) x$se) %>% bind_cols
+    j <- combine_data(sslist)
+    b <- j %>% dplyr::select(starts_with("beta")) %>% as.matrix()
+    se <- j %>% dplyr::select(starts_with("se")) %>% as.matrix()
     o <- lapply(1:nrow(b), \(i) {
         fixed_effects_meta_analysis(as.numeric(b[i,]), as.numeric(se[i,]))
     })
-    Q <- tibble(rsid = sslist[[1]]$rsid, Qpval = sapply(o, \(x) x$Qpval))
+    Q <- tibble(snpid = j$snpid, Qpval = sapply(o, \(x) x$Qpval))
     Qj <- lapply(o, \(x) x$Qjpval) %>% do.call(rbind, .) %>% 
         as_tibble()
+    
     names(Qj) <- names(sslist)
-    Qj$rsid <- sslist[[1]]$rsid
+    Qj$snpid <- j$snpid
     return(list(Q=Q, Qj=Qj))
+}
+
+
+combine_data <- function(sslist) {
+    j <- sslist[[1]] %>% select(snpid, beta, se)
+    for(i in 2:length(sslist))
+    {
+        j <- full_join(j, sslist[[i]] %>% select(snpid, beta, se), by="snpid")
+    }
+    j %>% dplyr::select(starts_with("beta"))
+    return(j)
 }
 ```
 
+For each SNP that is present in at least 2 populations, estimate the heterogeneity of effects between the populations. Do this two ways
 
+- `Q` - global heterogeneity test for the SNP across all populations (Cochrane's Q)
+- `Qj` - the deviation of each population contributing to the global heterogeneity Q
 
 ```{r}
-exl <- lapply(pops, \(x) subset(ex, pop==x))
+exl <- lapply(pops, \(x) subset(ex, pop==x) %>% subset(!duplicated(snpid)))
 names(exl) <- pops
 
 o <- heterogeneity_test(exl)
-
-ex %>%
-    group_by(pop) %>%
-    summarise(minp=min(pval), n=max(n, na.rm=T))
-
-p <- ex %>%
-ggplot(., aes(x=beta, y=pop)) +
-geom_point(aes(colour=pop)) +
-geom_errorbarh(aes(colour=pop, xmin=beta-se*1.96, xmax=beta+se*1.96), height=0) +
-facet_grid(snpid ~ .) +
-geom_vline(xintercept=0, linetype="dotted")
-ggsave(p, file="results/fp.pdf", width=8, height=60, limitsize=FALSE)
+o$Q$fdr <- p.adjust(o$Q$Qpval, "fdr")
+min(o$Q$fdr)
 ```
 
-
-
+Not much evidence for any heterogeneity. Plot the biggest heterogeneity SNPs (though none pass multiple testing)
 
 ```{r}
+selsnpid <- subset(o$Q, Qpval < 0.05)$snpid
+subset(o$Qj, snpid %in% selsnpid)
 
-## MR
+ex %>%
+    filter(snpid %in% selsnpid) %>%
+    ggplot(., aes(x=beta, y=pop)) +
+    geom_point(aes(colour=pop)) +
+    geom_errorbarh(aes(colour=pop, xmin=beta-se*1.96, xmax=beta+se*1.96), height=0) +
+    facet_grid(snpid ~ .) +
+    geom_vline(xintercept=0, linetype="dotted") +
+    scale_colour_brewer(type="qual")
+```
+
+Compare effects to see the degree of agreement of smaller pops vs European
+
+```{r}
 
 a <- subset(ex, pop=="eur")
 b <- subset(ex, pop != "eur")
 ab <- inner_join(a, b, by="snpid") %>% filter(pval.x < 5e-8)
 
-lapply(unique(ab$pop.y), function(p){
-    x <- subset(ab, pop.y==p)
-    summary(lm(beta.x ~ 0 + beta.y, data=x, weight=1/se.y^2))$coef
-})
+nsum <- ex %>%
+    group_by(pop) %>%
+    summarise(minp=min(pval), n=max(n, na.rm=T)) %>%
+    mutate(label = paste0(pop, ", n=", n))
+
+ab <- left_join(ab, subset(nsum, select=c(pop, label)), by=c("pop.y"="pop"))
+
+slope <- lapply(unique(ab$label), function(p){
+    x <- subset(ab, label==p)
+    summary(lm(beta.x ~ 0 + beta.y, data=x, weight=1/se.y^2))$coef %>% as_tibble()  %>%
+    mutate(lab=paste0("b = ", round(Estimate, 2), " (", round(`Std. Error`, 3), ")"))
+}) %>% bind_rows() %>% mutate(label=unique(ab$label))
+slope
+
+```
+
+The slopes are actually quite strong - plot
+
+```{r}
+ggplot(ab, aes(x=beta.x, y=beta.y)) +
+geom_point() +
+geom_smooth(method="lm") +
+facet_wrap(~ label)
+```
 
 
+Compare the expected vs observed replication rates - European vs other populations
+
+```{r}
 ## expected vs observed
 
 #' Expected vs observed replication rates
@@ -118,8 +179,7 @@ lapply(unique(ab$pop.y), function(p){
 #' @param b_rep corresponding vector of associations in progression
 #' @param se_rep standard errors of effects in progression
 #' @param alpha p-value threshold to check for replication of incidence hits in progression (e.g. try 0.05 or 1e-5)
-expected_vs_observed_replication <- function(b_disc, b_rep, se_disc, se_rep, alpha)
-{
+expected_vs_observed_replication <- function(b_disc, b_rep, se_disc, se_rep, alpha) {
     p_sign <- pnorm(-abs(b_disc) / se_disc) * pnorm(-abs(b_disc) / se_rep) + ((1 - pnorm(-abs(b_disc) / se_disc)) * (1 - pnorm(-abs(b_disc) / se_rep)))
     p_sig <- pnorm(-abs(b_disc) / se_rep + qnorm(alpha / 2)) + (1 - pnorm(-abs(b_disc) / se_rep - qnorm(alpha / 2)))
     p_rep <- pnorm(abs(b_rep)/se_rep, lower.tail=FALSE)
@@ -144,13 +204,19 @@ expected_vs_observed_replication <- function(b_disc, b_rep, se_disc, se_rep, alp
 
 eores <- lapply(unique(ab$pop.y), function(p){
     x <- subset(ab, pop.y==p)
-    o <- expected_vs_observed_replication(x$beta.x, x$beta.y, x$se.x, x$se.y, 0.05)
+    o <- expected_vs_observed_replication(x$beta.x, x$beta.y, x$se.x, x$se.y, 0.01)
     o$res$pop <- p
     o$variants$pop <- p
     return(o)
 })
 
 lapply(eores, \(x) x$res) %>% bind_rows() %>% subset(metric=="Sign") %>% dplyr::select(pop, nsnp, datum, value, pdiff)
-
-lapply(eores, \(x) x$variants) %>% bind_rows() %>% filter(sign_fail)
 ```
+
+The degree of replication of the beta direction is in line with expectation across all populations
+
+```{r}
+lapply(eores, \(x) x$res) %>% bind_rows() %>% subset(metric=="P-value") %>% dplyr::select(pop, nsnp, datum, value, pdiff)
+```
+
+The degree of replication of the p-value is slightly higher than expected - this is because of ascertainment from the meta analysis.
