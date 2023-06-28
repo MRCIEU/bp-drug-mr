@@ -20,4 +20,7 @@ Phenotypes of interest:
 - Hypertension
 - Stroke
 
-- 
+| Data source  | Ancestry | GWAS software |
+| ------------- | ------------- |
+| UK Biobank | AFR  | GENESIS |
+| | EAS| GENESIS  |
