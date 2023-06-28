@@ -26,3 +26,4 @@ Phenotypes of interest:
 | | EAS| GENESIS  |
 | | EUR | BOLT-LMM |
 | | SAS | GENESIS |
+| Ugandan Genome Resource | Continental AFR | GENESIS |
