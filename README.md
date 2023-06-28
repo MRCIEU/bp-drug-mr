@@ -27,3 +27,11 @@ Phenotypes of interest:
 | | EUR | BOLT-LMM |
 | | SAS | GENESIS |
 | Ugandan Genome Resource | Continental AFR | GENESIS |
+
+### Meta-analyses using METAL 
+Analysis: 
+- Inverse variance weighted approach weighted on sample size
+
+### Comparison of effects across ancestry 
+Analysis: 
+
