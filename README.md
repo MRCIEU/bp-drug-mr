@@ -21,6 +21,6 @@ Phenotypes of interest:
 - Stroke
 
 | Data source  | Ancestry | GWAS software |
-| ------------- | ------------- |
-| UK Biobank | AFR  | GENESIS |
+| --- | --- | --- |
+| UK Biobank | AFR | GENESIS |
 | | EAS| GENESIS  |
