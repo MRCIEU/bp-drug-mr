@@ -24,3 +24,5 @@ Phenotypes of interest:
 | --- | --- | --- |
 | UK Biobank | AFR | GENESIS |
 | | EAS| GENESIS  |
+| | EUR | BOLT-LMM |
+| | SAS | GENESIS |
