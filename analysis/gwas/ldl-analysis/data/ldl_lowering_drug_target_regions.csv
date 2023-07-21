@@ -1,0 +1,4 @@
+Drug    Target gene     Chromosome      Position (hg19) Function
+Statins HMGCR   5       74632993-74657941       Gene
+Statins PCSK9   1       55505221-55530525       Gene
+Ezetimibe       NPC1L1  7       44552134-44580929       Gene
