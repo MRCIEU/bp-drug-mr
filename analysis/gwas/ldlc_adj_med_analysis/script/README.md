@@ -11,11 +11,11 @@ In individuals taking LDL-lowering medication, their observed LDL cholesterol (L
 ## Organise data 
 Relative medication adjustment 
 ```
-
+Rscript LDL_adj_by_med_status_rel.r
 ```
 Absolute medication adjustment 
 ```
-
+Rscript LDL_adj_by_med_status_abs.r
 ```
 
 ## Conduct GWAS 
