@@ -12,7 +12,7 @@ module add apps/plink/1.90
 ## Clump cross-ancestry GWAS
 
 ```
-sh
+sh glgc_cross_ancestry_ldl_ld_clumping.sh
 ```
 
 ## Organise data and extract relevant variants
