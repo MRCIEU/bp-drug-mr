@@ -1,4 +1,4 @@
-# Perform cross-ancestry LDL cholesterol analysis
+# Perform cross-ancestry LDL cholesterol analysis using GLGC datasets 
 
 ## Setup
 
@@ -7,6 +7,12 @@ Make sure you have `bcftools` installed and available on the path e.g. on bc4
 ```
 module add apps/bcftools-1.9-74/1.9-74
 module add apps/plink/1.90
+```
+
+## Clump cross-ancestry GWAS
+
+```
+sh
 ```
 
 ## Organise data and extract relevant variants
