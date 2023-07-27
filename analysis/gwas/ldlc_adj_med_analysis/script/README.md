@@ -19,10 +19,14 @@ Rscript LDL_adj_by_med_status_abs.r
 ```
 
 ## Conduct GWAS 
+Relative medication adjustment
 ```
 
 ```
+Absolute medication adjustment 
+```
 
+```
 ## LD clump GWAS to identify number of independent SNPs 
 ```
 
