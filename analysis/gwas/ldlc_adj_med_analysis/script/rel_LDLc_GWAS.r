@@ -25,6 +25,10 @@ pc <- fread(paste0(dir,"/mrc_pca.txt"), header=T, fill = T, na.strings = c("", N
 load(file = paste0(dirk, "/AFR/pcrelate_kinship_AFR.RData"))
 kinship_scaled <- pcrelateToMatrix(mypcrelate, thresh = 2^(-11/2), scaleKin = 2)
 
+# Create a genotype object
+geno <- GdsGenotypeReader(filename = paste0(dirg, "/AFR/merged_chr1_22/AFR.genotype.gds"))
+genoData <- GenotypeData(geno)
+
 # Reformat covariate data
 cov_select <- cov %>% select(IID, age, sex)
 cov_replace <- cov_select %>% mutate(sex = ifelse(sex == 1, "M", "F"))
@@ -73,10 +77,6 @@ for (phenotype in phenotype_names) {
 
   # Fit null model
   nullmod <- fitNullModel(scanAnnot, outcome = "pheno", covars = c("age", "pc1", "pc2", "pc3", "pc4", "pc5", "pc6", "pc7", "pc8", "pc9", "pc10", "pc11", "pc12", "pc13", "pc14", "pc15", "pc16", "pc17", "pc18", "pc19", "pc20"), cov.mat = kinship_scaled, family = "gaussian")
-
-  # create a genotype object
-  geno <- GdsGenotypeReader(filename = paste0(dirg, "/AFR/merged_chr1_22/AFR.genotype.gds"))
-  genoData <- GenotypeData(geno)
 
   # Run SNP-phenotype association test
   genoIterator <- GenotypeBlockIterator(genoData)
