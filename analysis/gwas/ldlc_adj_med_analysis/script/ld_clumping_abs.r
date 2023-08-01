@@ -71,7 +71,7 @@ num_clumped_snps_ldlc_2.0 <- print(nrow(ldlc_2.0))
 # Organise results 
 results <- data.frame(
   Model = c("0.3", "0.5", "0.7", "0.9", "1.0", "1.2", "1.4", "1.6", "1.8","2.0"),
-  Number_LD_clumped_SNPs = c(num_clumped_snps_ldlc_0.3, num_clumped_snps_ldlc_0.5, num_clumped_snps_ldlc_0.7, num_clumped_snps_ldlc_0.9, num_clumped_snps_ldlc_1.0, num_clumped_snps_ldlc_1.2, num_clumped_snps_ldlc_1.4, num_clumped_snps_ldlc_1.6, num_clumped_snps_ldlc_1.8,)
   Number_LD_clumped_SNPs = c(num_clumped_snps_ldlc_0.3, num_clumped_snps_ldlc_0.5, num_clumped_snps_ldlc_0.7, num_clumped_snps_ldlc_0.9, num_clumped_snps_ldlc_1.0, num_clumped_snps_ldlc_1.2, num_clumped_snps_ldlc_1.4, num_clumped_snps_ldlc_1.6, num_clumped_snps_ldlc_2.0)
+)
 
   write.table(results, "LD_clumped_res_abs_afr.txt", sep = "\t", col.names=T,row.names=F,quote=F)
