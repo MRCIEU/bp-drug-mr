@@ -67,5 +67,6 @@ num_clumped_snps_ldlc_80 <- print(nrow(ldlc_80))
 results <- data.frame(
   Model = c("Unadjusted", "10%", "20%", "30%", "40", "50", "60", "70", "80"),
   Number_LD_clumped_SNPs = c(num_clumped_snps_ldlc_unadj, num_clumped_snps_ldlc_10, num_clumped_snps_ldlc_20, num_clumped_snps_ldlc_30, num_clumped_snps_ldlc_40, num_clumped_snps_ldlc_50, num_clumped_snps_ldlc_60, num_clumped_snps_ldlc_70, num_clumped_snps_ldlc_80)
+  )
 
   write.table(results, "LD_clumped_res_rel_afr.txt", sep = "\t", col.names=T,row.names=F,quote=F)
