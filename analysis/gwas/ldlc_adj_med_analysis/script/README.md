@@ -5,7 +5,7 @@ In individuals taking LDL-lowering medication, their observed LDL cholesterol (L
 
 ## Simulation 
 ```
-
+Rscript sim.r
 ```
 
 ## Organise data 
