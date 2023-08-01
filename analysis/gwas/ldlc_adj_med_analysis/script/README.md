@@ -28,6 +28,11 @@ Absolute medication adjustment
 Rscript abs_LDLc_GWAS.r
 ```
 ## LD clump GWAS to identify number of independent SNPs 
+Relative medication adjustment
 ```
-
+Rscript ld_clumping_rel.r
+```
+Absolute medication adjustment 
+```
+Rscript ld_clumping_abs.r
 ```
