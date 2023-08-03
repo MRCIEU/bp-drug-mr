@@ -12,6 +12,7 @@ Load relevant packages
 ```{r}
 library(dplyr)
 library(ggplot2)
+set.seed(1234)
 ```
 
 Generate data 
@@ -41,40 +42,135 @@ generate_data <- function(nid, mean_ldl, sd_ldl,b_gy, b_gother) {
 ```
 
 Medication use - Calculate the probability of medication use based on prevalence 
-```{r}
-medication_prevalence <- 0.13
 
-med_prob <- function(g_other, b_omed) {
-  plogis(qlogis(medication_prevalence) + g_other * b_omed)
+```{r}
+#' 
+med_prob <- function(score, medication_prevalence) {
+  score <- score - mean(score)
+  plogis(qlogis(medication_prevalence) + score)
 }
 
-med_use_prob <- med_prob(g_other, b_omed)
-
-medication_use <- rbinom(nid, 1, med_use_prob)
-
-mean_medication_use <- mean(medication_use)
-print(mean_medication_use)
+med_prob(g_other, 0.01, 0.3) %>% {rbinom(nid, 1, .)} %>% mean
+med_prob(g_other, 0.1, 0.13) %>% {rbinom(nid, 1, .)} %>% mean
 ```
-Estimate genetic effects of LDL cholesterol
+
+
 ```{r}
-est_effs_1 <- function(dat, med_effect, medication_use) {
-  y <- mean_ldl + g * dat$b_gy + rnorm(nrow(dat), sd = sqrt(dat$sd_ldl^2 - dat$b_gy^2))
- y_obs <- y
- y_obs[as.logical(medication_use)] <- y_obs[as.logical(medication_use)] * med_effect
- y_adj_true <- y_obs
- y_adj_true[as.logical(medication_use)] <- y_obs[as.logical(medication_use)] / med_effect
- y_adj_approx <- y_obs
- y_adj_approx[as.logical(medication_use)] <- y_obs[as.logical(medication_use)] + 20
-  
-  results_1 <- rbind(
-  summary(lm(y ~ g))$coef[2,],
-  summary(lm(y_obs ~ g))$coef[2,],
-  summary(lm(y_adj_true ~ g))$coef[2,],
-  summary(lm(y_adj_approx ~ g))$coef[2,]
-) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_adj_true", "y_adj_approx"))
-  
-  return(results_1)
+
+#' Data generating model
+#' 
+#' @param nid Sample size
+#' @param af_d Allele frequency of direct effect
+#' @param af_i Alle
+#' @param mprev
+#' @param ldl_b
+#' @param mean_ldl
+#' @param sd_ldl
+#' @param b_d
+#' @param b_i
+#' @param med_b
+#' @param adj
+dgm <- function(nid, af_d, af_i, mprev, ldl_b, mean_ldl, sd_ldl, b_d, b_i, med_b, adj) {
+  dat <- tibble(
+    Gd = rbinom(nid, 2, af_d),
+    Gi = rbinom(nid, 2, af_i),
+    LDL = (Gd * b_d) %>% scale() %>% {. * sd_ldl + mean_ldl} %>% drop(),
+    med = med_prob(score = LDL * ldl_b + Gi * b_i, mprev) %>% {rbinom(nid, 1, .)}
+  )
+  dat$LDLo <- dat$LDL
+  dat$LDLo[as.logical(dat$med)] <- dat$LDLo[as.logical(dat$med)] * med_b
+  dat$LDLa <- dat$LDLo
+  dat$LDLa[as.logical(dat$med)] <- dat$LDLo[as.logical(dat$med)] + adj
+  return(dat)
 }
+
+example_dat <- dgm(nid=10000, af_d=0.3, af_i=0.4, mprev=0.13, ldl_b=0.5, mean_ldl=3.55, sd_ldl=0.87, b_d=0.3, b_i=1, med_b=0.8, adj=0.8)
+str(example_dat)
+```
+
+Checks
+
+```{r}
+mean(example_dat$med)
+mean(example_dat$LDL)
+mean(example_dat$LDLo)
+mean(example_dat$LDLo[example_dat$med])
+mean(example_dat$LDLo[!example_dat$med])
+```
+
+```{r}
+cor(example_dat$LDL, example_dat$LDLo)
+cor(example_dat$LDL, example_dat$LDLa)
+cor(example_dat$LDLa, example_dat$LDLo)
+```
+
+
+Estimate genetic effects of LDL cholesterol
+
+```{r}
+est_effs_1 <- function(dat) {
+  # g <- dat$Gd
+  # g_other <- dat$Gi
+  # y <- dat$LDL
+  # medication_use <- dat$med
+  # y_obs <- y
+  # y_nonmed <- y
+  # y_nonmed[as.logical(medication_use)] <- NA
+  # y_obs[as.logical(medication_use)] <- y_obs[as.logical(medication_use)] * med_effect
+  # y_adj_true <- y_obs
+  # y_adj_true[as.logical(medication_use)] <- y_obs[as.logical(medication_use)] / med_effect
+  # y_adj_approx <- y_obs
+  # y_adj_approx[as.logical(medication_use)] <- y_obs[as.logical(medication_use)] + adj
+
+  results_1 <- rbind(
+    summary(lm(LDL ~ Gd, dat))$coef[2,],
+    summary(lm(LDLo ~ Gd, dat))$coef[2,],
+    summary(lm(LDL ~ Gd, dat %>% filter(!med)))$coef[2,],
+    summary(lm(LDLa ~ Gd, dat))$coef[2,]
+  ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_adj_approx"), g="direct")
+
+  results_2 <- rbind(
+    summary(lm(LDL ~ Gi, dat))$coef[2,],
+    summary(lm(LDLo ~ Gi, dat))$coef[2,],
+    summary(lm(LDL ~ Gi, dat %>% filter(!med)))$coef[2,],
+    summary(lm(LDLa ~ Gi, dat))$coef[2,]
+  ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_adj_approx"), g="indirect")
+
+
+
+
+#   results_1 <- rbind(
+#   summary(lm(y ~ g))$coef[2,],
+#   summary(lm(y_obs ~ g))$coef[2,],
+#   summary(lm(y_nonmed ~ g))$coef[2,],
+#   summary(lm(y_adj_approx ~ g))$coef[2,]
+# ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_adj_approx"), g="direct")
+
+#   results_2 <- rbind(
+#   summary(lm(y ~ g_other))$coef[2,],
+#   summary(lm(y_obs ~ g_other))$coef[2,],
+#   summary(lm(y_nonmed ~ g_other))$coef[2,],
+#   summary(lm(y_adj_approx ~ g_other))$coef[2,]
+# ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_adj_approx"), g="indirect")
+
+  return(bind_rows(results_1, results_2))
+}
+
+example_dat <- dgm(
+  nid=10000, 
+  af_d=0.3, 
+  af_i=0.4, 
+  mprev=0.13, 
+  ldl_b=0.5, 
+  mean_ldl=3.55, 
+  sd_ldl=0.87, 
+  b_d=0.3, 
+  b_i=1, 
+  med_b=0.8, 
+  adj=0.8
+)
+
+example_dat %>% est_effs_1
 ```
 
 Estimate genetic effects of non-LDL cholesterol 
