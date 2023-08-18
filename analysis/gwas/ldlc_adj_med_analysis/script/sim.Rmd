@@ -14,62 +14,27 @@ library(dplyr)
 library(ggplot2)
 set.seed(1234)
 ```
-
-Generate data 
 ```{r}
-nid <- 100000
-g <- rnorm(nid)
-g_other <- rnorm(nid)
-mean_ldl <- 3.56
-sd_ldl <- 0.87
-med_effect <- 0.8
-b_omed <- 0.5
-
-generate_data <- function(nid, mean_ldl, sd_ldl,b_gy, b_gother) {
-  mean_ldl <- mean_ldl
-  sd_ldl <- sd_ldl
-  b_gy <- rnorm(nid, b_gy)
-  b_gother <- rnorm(nid, b_gother)
-  dat <- data.frame(
-  mean_ldl = mean_ldl,
-  sd_ldl = sd_ldl,
-  b_gy = b_gy,
-  b_gother = b_gother
-  )
-  
-  return(dat)
-}
-```
-
-Medication use - Calculate the probability of medication use based on prevalence 
-
-```{r}
-#' 
 med_prob <- function(score, medication_prevalence) {
   score <- score - mean(score)
   plogis(qlogis(medication_prevalence) + score)
 }
-
-med_prob(g_other, 0.01, 0.3) %>% {rbinom(nid, 1, .)} %>% mean
-med_prob(g_other, 0.1, 0.13) %>% {rbinom(nid, 1, .)} %>% mean
 ```
 
-
 ```{r}
-
 #' Data generating model
 #' 
 #' @param nid Sample size
 #' @param af_d Allele frequency of direct effect
 #' @param af_i Alle
-#' @param mprev
-#' @param ldl_b
-#' @param mean_ldl
-#' @param sd_ldl
-#' @param b_d
-#' @param b_i
-#' @param med_b
-#' @param adj
+#' @param mprev Medication prevalence 
+#' @param ldl_b LDLc beta effect estimate
+#' @param mean_ldl Mean LDLc value
+#' @param sd_ldl Standard deviation of the mean LDLc value
+#' @param b_d Direct beta effect estimate
+#' @param b_i Indirect beta effect estimate
+#' @param med_b Medication beta effect estimate 
+#' @param adj Medication adjustment 
 dgm <- function(nid, af_d, af_i, mprev, ldl_b, mean_ldl, sd_ldl, b_d, b_i, med_b, adj) {
   dat <- tibble(
     Gd = rbinom(nid, 2, af_d),
@@ -89,7 +54,6 @@ str(example_dat)
 ```
 
 Checks
-
 ```{r}
 mean(example_dat$med)
 mean(example_dat$LDL)
@@ -106,23 +70,9 @@ cor(example_dat$LDLa, example_dat$LDLo)
 
 
 Estimate genetic effects of LDL cholesterol
-
 ```{r}
-est_effs_1 <- function(dat) {
-  # g <- dat$Gd
-  # g_other <- dat$Gi
-  # y <- dat$LDL
-  # medication_use <- dat$med
-  # y_obs <- y
-  # y_nonmed <- y
-  # y_nonmed[as.logical(medication_use)] <- NA
-  # y_obs[as.logical(medication_use)] <- y_obs[as.logical(medication_use)] * med_effect
-  # y_adj_true <- y_obs
-  # y_adj_true[as.logical(medication_use)] <- y_obs[as.logical(medication_use)] / med_effect
-  # y_adj_approx <- y_obs
-  # y_adj_approx[as.logical(medication_use)] <- y_obs[as.logical(medication_use)] + adj
-
-  results_1 <- rbind(
+est_effs <- function(dat) {
+    results_1 <- rbind(
     summary(lm(LDL ~ Gd, dat))$coef[2,],
     summary(lm(LDLo ~ Gd, dat))$coef[2,],
     summary(lm(LDL ~ Gd, dat %>% filter(!med)))$coef[2,],
@@ -135,24 +85,6 @@ est_effs_1 <- function(dat) {
     summary(lm(LDL ~ Gi, dat %>% filter(!med)))$coef[2,],
     summary(lm(LDLa ~ Gi, dat))$coef[2,]
   ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_adj_approx"), g="indirect")
-
-
-
-
-#   results_1 <- rbind(
-#   summary(lm(y ~ g))$coef[2,],
-#   summary(lm(y_obs ~ g))$coef[2,],
-#   summary(lm(y_nonmed ~ g))$coef[2,],
-#   summary(lm(y_adj_approx ~ g))$coef[2,]
-# ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_adj_approx"), g="direct")
-
-#   results_2 <- rbind(
-#   summary(lm(y ~ g_other))$coef[2,],
-#   summary(lm(y_obs ~ g_other))$coef[2,],
-#   summary(lm(y_nonmed ~ g_other))$coef[2,],
-#   summary(lm(y_adj_approx ~ g_other))$coef[2,]
-# ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_adj_approx"), g="indirect")
-
   return(bind_rows(results_1, results_2))
 }
 
@@ -170,109 +102,91 @@ example_dat <- dgm(
   adj=0.8
 )
 
-example_dat %>% est_effs_1
-```
-
-Estimate genetic effects of non-LDL cholesterol 
-```{r}
-est_effs_2 <- function(dat, med_effect, medication_use) {
-  y <- mean_ldl + g * dat$b_gy + rnorm(nrow(dat), sd = sqrt(dat$sd_ldl^2 - dat$b_gy^2))
- y_obs <- y
- y_obs[as.logical(medication_use)] <- y_obs[as.logical(medication_use)] * med_effect
- y_adj_true <- y_obs
- y_adj_true[as.logical(medication_use)] <- y_obs[as.logical(medication_use)] / med_effect
- y_adj_approx <- y_obs
- y_adj_approx[as.logical(medication_use)] <- y_obs[as.logical(medication_use)] + 20
-  
-  results_2 <- rbind(
-  summary(lm(y ~ g_other))$coef[2,],
-  summary(lm(y_obs ~ g_other))$coef[2,],
-  summary(lm(y_adj_true ~ g_other))$coef[2,],
-  summary(lm(y_adj_approx ~ g_other))$coef[2,]
-) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_adj_true", "y_adj_approx"))
-  
-  return(results_2)
-}
+example_dat %>% est_effs
 ```
 
 Create parameter grid 
 ```{r}
 param <- expand.grid(
   nsim = 1:1000,
-  nid = 10000,
-  b_gy = c(0.5, 1),
-  b_gother = c(0.5, 1)
+  nid = 100000,
+  af_d=c(0.30), 
+  af_i=c(0.40), 
+  mprev=0.14, 
+  ldl_b=c(0.5),
+  b_d=c(0.30), 
+  b_i=c(1), 
+  med_b=0.8, 
+  adj=0.8
 )
+
+# Adding random noise to parameter values
+noise_factor <- 0.5  # Adjust this value for increased noise intensity
+param$af_d <- jitter(param$af_d, factor = noise_factor)
+param$af_i <- jitter(param$af_i, factor = noise_factor)
+param$ldl_b <- jitter(param$ldl_b, factor = noise_factor)
+param$b_d <- jitter(param$b_d, factor = noise_factor)
+param$b_i <- jitter(param$b_i, factor = noise_factor)
+
+# Make sure parameter values are within defined ranges
+param$af_d <- pmax(pmin(param$af_d, 0.30))
+param$af_i <- pmax(pmin(param$af_i, 0.40))
+param$ldl_b <- pmax(pmin(param$ldl_b, 0.50))
+param$b_d <- pmax(pmin(param$b_d, 0.30))
+param$b_i <- pmax(pmin(param$b_i, 1.00), 0.80)
+
+# Display the modified parameter grid
+print(param)
 ```
 
 Apply data generation and estimation to each parameter combination
 ```{r}
-all_results_1 <- list()
+all_results <- list()
 
-all_results_1 <- lapply(1:nrow(param), function(i) {
-  d <- generate_data(
+all_results <- lapply(1:nrow(param), function(i) {
+  d <- dgm(
     nid = param$nid[i],
     mean_ldl = 3.55595,
     sd_ldl = 0.870798,
-    b_gy = param$b_gy[i],
-    b_gother = param$b_gother[i]
+    af_d=param$af_d[i], 
+    af_i=param$af_i[i], 
+    mprev=0.14, 
+    ldl_b=param$ldl_b[i],
+    b_d=param$b_d[i], 
+    b_i=param$b_i[i], 
+    med_b=0.8, 
+    adj=0.8
   )
-  r1 <- est_effs_1(d, med_effect, medication_use)
-  return(r1)
+  res <- est_effs(d)
+  return(res)
 })
 
-all_results_2 <- list()
-
-all_results_2 <- lapply(1:nrow(param), function(i) {
-  d <- generate_data(
-    nid = param$nid[i],
-    mean_ldl = 3.55595,
-    sd_ldl = 0.870798,
-    b_gy = param$b_gy[i],
-    b_gother = param$b_gother[i]
-  )
-  r2 <- est_effs_2(d, med_effect, medication_use)
-  return(r2)
-})
 ```
 
 Organise results
 ```{r}
-for (i in seq_along(all_results_1)) {
-  attr(all_results_1[[i]], "Estimate") <- param$Estimate[i]
-  attr(all_results_1[[i]], "Std. Error") <- param$Std.Error[i]
-  attr(all_results_1[[i]], "measure") <- param$measure[i]
-}
-
-for (i in seq_along(all_results_2)) {
-  attr(all_results_2[[i]], "Estimate") <- param$Estimate[i]
-  attr(all_results_2[[i]], "Std. Error") <- param$Std.Error[i]
-  attr(all_results_2[[i]], "measure") <- param$measure[i]
+for (i in seq_along(all_results)) {
+  attr(all_results[[i]], "Estimate") <- param$Estimate[i]
+  attr(all_results[[i]], "Std. Error") <- param$Std.Error[i]
+  attr(all_results[[i]], "measure") <- param$measure[i]
 }
 
 # Convert the list of results to a single data frame
-all_results_df_1 <- bind_rows(all_results_1)
-all_results_df_2 <- bind_rows(all_results_2)
+all_results_df <- bind_rows(all_results)
 
 # Calculate the mean estimated coefficient and standard error for each measure
-summary_results_1 <- all_results_df_1 %>%
-  group_by(measure) %>%
-  summarise(mean_estimate = mean(Estimate),
-            mean_se = sum(`Std. Error`) / 1000
-            )
-
-summary_results_2 <- all_results_df_2 %>%
-  group_by(measure) %>%
+summary_results <- all_results_df %>%
+  group_by(measure,g) %>%
   summarise(mean_estimate = mean(Estimate),
             mean_se = sum(`Std. Error`) / 1000
             )
 
 # Order of measures for the forest plot
-measure_order <- c("y", "y_obs", "y_adj_approx", "y_adj_true")
+measure_order <- c("y", "y_obs", "y_nomed","y_adj_approx")
 
 # Create a forest plot
-ggplot(summary_results_1, aes(x = mean_estimate, y = measure)) +
-  geom_point(size = 3, color = "blue") +
+ggplot(summary_results, aes(x = mean_estimate, y = measure)) +
+  geom_point(size = 3, aes(color = g)) +
   geom_errorbarh(aes(xmin = mean_estimate - 1.96 * mean_se, xmax = mean_estimate + 1.96 * mean_se), height = 0.2) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "gray", size = 1) +
   labs(title = "Forest plot of the effects of LDL cholesterol on LDL cholesterol genotype",
@@ -285,19 +199,6 @@ ggplot(summary_results_1, aes(x = mean_estimate, y = measure)) +
   theme(panel.grid.major.y = element_blank(),
         panel.grid.minor.y = element_blank())
 
-ggplot(summary_results_2, aes(x = mean_estimate, y = measure)) +
-  geom_point(size = 3, color = "blue") +
-  geom_errorbarh(aes(xmin = mean_estimate - 1.96 * mean_se, xmax = mean_estimate + 1.96 * mean_se), height = 0.2) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "gray", size = 1) +
-  labs(title = "Forest plot of the effects of LDL cholesterol on non-LDL cholesterol genotype",
-       subtitle = paste("Based on", 1000, "simulations"),
-       x = "Estimated Coefficient",
-       y = "Measure") +
-  scale_y_discrete(limits = rev(measure_order)) +
-  xlim(-1,1.5) +
-  theme_minimal() +
-  theme(panel.grid.major.y = element_blank(),
-        panel.grid.minor.y = element_blank())
 ```
 # Summary
 - By adjusting for medication usage in observed LDL values, the simulation shows an attenuation in genetic effect estimates. 
@@ -306,25 +207,3 @@ ggplot(summary_results_2, aes(x = mean_estimate, y = measure)) +
 ```{r}
 sessionInfo()
 ```
-R version 4.2.1 (2022-06-23 ucrt)
-Platform: x86_64-w64-mingw32/x64 (64-bit)
-Running under: Windows 10 x64 (build 19045)
-
-Matrix products: default
-
-locale:
-[1] LC_COLLATE=English_United Kingdom.utf8  LC_CTYPE=English_United Kingdom.utf8    LC_MONETARY=English_United Kingdom.utf8 LC_NUMERIC=C                           
-[5] LC_TIME=English_United Kingdom.utf8    
-
-attached base packages:
-[1] stats     graphics  grDevices utils     datasets  methods   base     
-
-other attached packages:
-[1] ggplot2_3.4.2 dplyr_1.1.2  
-
-loaded via a namespace (and not attached):
- [1] bslib_0.5.0        jquerylib_0.1.4    pillar_1.9.0       compiler_4.2.1     RColorBrewer_1.1-3 tools_4.2.1        digest_0.6.31      jsonlite_1.8.5     evaluate_0.21     
-[10] lifecycle_1.0.3    tibble_3.2.1       gtable_0.3.3       nlme_3.1-157       lattice_0.20-45    mgcv_1.8-40        pkgconfig_2.0.3    rlang_1.1.0        Matrix_1.5-4.1    
-[19] cli_3.6.1          rstudioapi_0.14    yaml_2.3.7         xfun_0.39          fastmap_1.1.1      withr_2.5.0        knitr_1.43         sass_0.4.6         generics_0.1.3    
-[28] vctrs_0.6.1        grid_4.2.1         tidyselect_1.2.0   glue_1.6.2         R6_2.5.1           fansi_1.0.4        rmarkdown_2.22     farver_2.1.1       magrittr_2.0.3    
-[37] scales_1.2.1       htmltools_0.5.5    splines_4.2.1      colorspace_2.1-0   labeling_0.4.2     utf8_1.2.3         munsell_0.5.0      cachem_1.0.8       crayon_1.5.2 
