@@ -189,8 +189,8 @@ ggplot(summary_results, aes(x = mean_estimate, y = measure)) +
   geom_point(size = 3, aes(color = g)) +
   geom_errorbarh(aes(xmin = mean_estimate - 1.96 * mean_se, xmax = mean_estimate + 1.96 * mean_se), height = 0.2) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "gray", size = 1) +
-  labs(title = "Forest plot of the effects of LDL cholesterol on LDL cholesterol genotype",
-       subtitle = paste("Based on", 1000, "simulations"),
+  labs(title = "Forest plot of the effects of LDL cholesterol on direct and indirect LDL cholesterol genetic factors",
+       subtitle = paste("Based on", 1,000, "simulations"),
        x = "Estimated Coefficient",
        y = "Measure") +
   scale_y_discrete(limits = rev(measure_order)) +
@@ -201,8 +201,7 @@ ggplot(summary_results, aes(x = mean_estimate, y = measure)) +
 
 ```
 # Summary
-- By adjusting for medication usage in observed LDL values, the simulation shows an attenuation in genetic effect estimates. 
-- Collider bias induced a negative association between unadjusted LDLc values and non-LDLc genetic factors, and a positive association between adjusted LDLc and non-LDLc genetic factors. 
+
 
 ```{r}
 sessionInfo()
