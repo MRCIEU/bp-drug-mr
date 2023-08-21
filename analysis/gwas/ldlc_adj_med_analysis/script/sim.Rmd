@@ -14,6 +14,7 @@ library(dplyr)
 library(ggplot2)
 set.seed(1234)
 ```
+
 ```{r}
 med_prob <- function(score, medication_prevalence) {
   score <- score - mean(score)
@@ -49,7 +50,7 @@ dgm <- function(nid, af_d, af_i, mprev, ldl_b, mean_ldl, sd_ldl, b_d, b_i, med_b
   return(dat)
 }
 
-example_dat <- dgm(nid=10000, af_d=0.3, af_i=0.4, mprev=0.13, ldl_b=0.5, mean_ldl=3.55, sd_ldl=0.87, b_d=0.3, b_i=1, med_b=0.8, adj=0.8)
+example_dat <- dgm(nid=100000, af_d=0.3, af_i=0.4, mprev=0.90, ldl_b=0.5, mean_ldl=3.55, sd_ldl=0.87, b_d=0.3, b_i=1, med_b=0.8, adj=0.8)
 str(example_dat)
 ```
 
@@ -75,24 +76,24 @@ est_effs <- function(dat) {
     results_1 <- rbind(
     summary(lm(LDL ~ Gd, dat))$coef[2,],
     summary(lm(LDLo ~ Gd, dat))$coef[2,],
-    summary(lm(LDL ~ Gd, dat %>% filter(!med)))$coef[2,],
+    summary(lm(LDLo ~ Gd, dat %>% filter(!med)))$coef[2,],
     summary(lm(LDLa ~ Gd, dat))$coef[2,]
   ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_adj_approx"), g="direct")
 
   results_2 <- rbind(
     summary(lm(LDL ~ Gi, dat))$coef[2,],
     summary(lm(LDLo ~ Gi, dat))$coef[2,],
-    summary(lm(LDL ~ Gi, dat %>% filter(!med)))$coef[2,],
+    summary(lm(LDLo ~ Gi, dat %>% filter(!med)))$coef[2,],
     summary(lm(LDLa ~ Gi, dat))$coef[2,]
   ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_adj_approx"), g="indirect")
   return(bind_rows(results_1, results_2))
 }
 
 example_dat <- dgm(
-  nid=10000, 
+  nid=100000, 
   af_d=0.3, 
   af_i=0.4, 
-  mprev=0.13, 
+  mprev=0.9, 
   ldl_b=0.5, 
   mean_ldl=3.55, 
   sd_ldl=0.87, 
@@ -121,7 +122,7 @@ param <- expand.grid(
 )
 
 # Adding random noise to parameter values
-noise_factor <- 0.5  # Adjust this value for increased noise intensity
+noise_factor <- 0.08  # Adjust this value for increased noise intensity
 param$af_d <- jitter(param$af_d, factor = noise_factor)
 param$af_i <- jitter(param$af_i, factor = noise_factor)
 param$ldl_b <- jitter(param$ldl_b, factor = noise_factor)
@@ -150,7 +151,7 @@ all_results <- lapply(1:nrow(param), function(i) {
     sd_ldl = 0.870798,
     af_d=param$af_d[i], 
     af_i=param$af_i[i], 
-    mprev=0.14, 
+    mprev=0.5, 
     ldl_b=param$ldl_b[i],
     b_d=param$b_d[i], 
     b_i=param$b_i[i], 
@@ -201,7 +202,8 @@ ggplot(summary_results, aes(x = mean_estimate, y = measure)) +
 
 ```
 # Summary
-
+- By adjusting for medication usage in observed LDL values, the simulation shows an attenuation in genetic effect estimates. 
+- Collider bias induced a negative association between unadjusted LDLc values and non-LDLc genetic factors, and a positive association between adjusted LDLc and non-LDLc genetic factors. 
 
 ```{r}
 sessionInfo()
