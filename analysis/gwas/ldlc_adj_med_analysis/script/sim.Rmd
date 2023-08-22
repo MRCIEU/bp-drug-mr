@@ -130,8 +130,8 @@ param$b_d <- jitter(param$b_d, factor = noise_factor)
 param$b_i <- jitter(param$b_i, factor = noise_factor)
 
 # Make sure parameter values are within defined ranges
-param$af_d <- pmax(pmin(param$af_d, 0.30))
-param$af_i <- pmax(pmin(param$af_i, 0.40))
+param$af_d <- pmax(pmin(param$af_d, 0.30),0.1)
+param$af_i <- pmax(pmin(param$af_i, 0.40),0.1)
 param$ldl_b <- pmax(pmin(param$ldl_b, 0.50))
 param$b_d <- pmax(pmin(param$b_d, 0.30))
 param$b_i <- pmax(pmin(param$b_i, 1.00), 0.80)
