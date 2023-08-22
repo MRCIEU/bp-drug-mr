@@ -40,13 +40,16 @@ dgm <- function(nid, af_d, af_i, mprev, ldl_b, mean_ldl, sd_ldl, b_d, b_i, med_b
   dat <- tibble(
     Gd = rbinom(nid, 2, af_d),
     Gi = rbinom(nid, 2, af_i),
-    LDL = (Gd * b_d) %>% scale() %>% {. * sd_ldl + mean_ldl} %>% drop(),
+    # LDL = genetic score + error, scaled to have specified mean and sd
+    LDL = (Gd * b_d + rnorm(nid)) %>% scale() %>% {. * sd_ldl + mean_ldl} %>% drop(),
     med = med_prob(score = LDL * ldl_b + Gi * b_i, mprev) %>% {rbinom(nid, 1, .)}
   )
   dat$LDLo <- dat$LDL
-  dat$LDLo[as.logical(dat$med)] <- dat$LDLo[as.logical(dat$med)] * med_b
+  # people with medication get a lower observed LDL
+  dat$LDLo[dat$med == 1] <- dat$LDLo[dat$med == 1] * med_b
+  # only people on medication get an adjusted LDL measurement from the observed
   dat$LDLa <- dat$LDLo
-  dat$LDLa[as.logical(dat$med)] <- dat$LDLo[as.logical(dat$med)] + adj
+  dat$LDLa[dat$med == 1] <- dat$LDLo[dat$med == 1] + adj
   return(dat)
 }
 
@@ -55,58 +58,85 @@ str(example_dat)
 ```
 
 Checks
-```{r}
-mean(example_dat$med)
-mean(example_dat$LDL)
-mean(example_dat$LDLo)
-mean(example_dat$LDLo[example_dat$med])
-mean(example_dat$LDLo[!example_dat$med])
-```
 
 ```{r}
-cor(example_dat$LDL, example_dat$LDLo)
-cor(example_dat$LDL, example_dat$LDLa)
-cor(example_dat$LDLa, example_dat$LDLo)
+summarise_dat <- function(dat) {
+  list(
+    bind_rows(
+      example_dat %>% group_by(med) %>% summarise(m=mean(LDL), s=sd(LDL)) %>% mutate(what="LDL"),
+      example_dat %>% group_by(med) %>% summarise(m=mean(LDLo), s=sd(LDLo)) %>% mutate(what="LDLo"),
+      example_dat %>% group_by(med) %>% summarise(m=mean(LDLa), s=sd(LDLa)) %>% mutate(what="LDLa")
+    ),
+    cor(subset(dat, select=c(LDL, LDLo, LDLa)))
+  )
+}
+summarise_dat(example_dat)
 ```
-
 
 Estimate genetic effects of LDL cholesterol
+
 ```{r}
 est_effs <- function(dat) {
+  datnonmed <- subset(dat, med == 0)
+  datmed <- subset(dat, med == 1)
     results_1 <- rbind(
     summary(lm(LDL ~ Gd, dat))$coef[2,],
     summary(lm(LDLo ~ Gd, dat))$coef[2,],
-    summary(lm(LDLo ~ Gd, dat %>% filter(!med)))$coef[2,],
+    summary(lm(LDLo ~ Gd, datnonmed))$coef[2,],
+    summary(lm(LDLo ~ Gd, datmed))$coef[2,],
     summary(lm(LDLa ~ Gd, dat))$coef[2,]
-  ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_adj_approx"), g="direct")
+  ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_med", "y_adj_approx"), n=c(nrow(dat), nrow(dat), nrow(datnonmed), nrow(datmed), nrow(dat)), g="direct")
 
   results_2 <- rbind(
     summary(lm(LDL ~ Gi, dat))$coef[2,],
     summary(lm(LDLo ~ Gi, dat))$coef[2,],
-    summary(lm(LDLo ~ Gi, dat %>% filter(!med)))$coef[2,],
+    summary(lm(LDLo ~ Gi, datnonmed))$coef[2,],
+    summary(lm(LDLo ~ Gi, datmed))$coef[2,],
     summary(lm(LDLa ~ Gi, dat))$coef[2,]
-  ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_adj_approx"), g="indirect")
+  ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_med", "y_adj_approx"), n=c(nrow(dat), nrow(dat), nrow(datnonmed), nrow(datmed), nrow(dat)), g="indirect")
   return(bind_rows(results_1, results_2))
 }
 
+plot_ests <- function(ests) {
+  truth <- subset(ests, measure == "y")
+
+  ggplot(ests, aes(x=`Estimate`, y=measure)) +
+  geom_rect(data=truth, fill="grey", aes(xmin=`Estimate` - 1.96 * `Std. Error`, xmax=`Estimate` + 1.96 * `Std. Error`, ymin=-Inf, ymax=Inf)) +
+  geom_point(aes(colour=`Pr(>|t|)` < 0.01)) +
+  geom_errorbarh(aes(colour=`Pr(>|t|)` < 0.01, xmin=`Estimate` - 1.96 * `Std. Error`, xmax=`Estimate` + 1.96 * `Std. Error`), height=0) +
+  geom_vline(xintercept=0, linetype="dotted") +
+  facet_grid(g ~ .)
+}
+```
+
+Example run
+
+```{r}
 example_dat <- dgm(
   nid=100000, 
   af_d=0.3, 
   af_i=0.4, 
-  mprev=0.9, 
+  mprev=0.13, 
   ldl_b=0.5, 
   mean_ldl=3.55, 
   sd_ldl=0.87, 
-  b_d=0.3, 
-  b_i=1, 
+  b_d=0.4, 
+  b_i=0.8, 
   med_b=0.8, 
   adj=0.8
 )
+ests <- example_dat %>% est_effs
+ests
+```
 
-example_dat %>% est_effs
+Plot results
+
+```{r}
+ests %>% plot_ests
 ```
 
 Create parameter grid 
+
 ```{r}
 param <- expand.grid(
   nsim = 1:1000,
