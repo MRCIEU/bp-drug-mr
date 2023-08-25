@@ -1,0 +1,228 @@
+---
+title: Cross-ancestry analysis of ldl cholesterol GWASs
+date: '2023-06-23'
+format:
+  html:
+    embed-resources: true
+---
+
+## Outline
+
+1. `organise_data.r` extracts LDL-lowering drug target regions from each population
+2. Estimate Cochrane's Q for each SNP across populations to identify any SNPs that have differential effects
+
+# Load organised data
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(data.table)
+
+ex <- readRDS("pop_extract_clumped.rds")
+pops <- c("AFR", "EAS", "EUR", "HIS", "SAS")
+head(ex)
+```
+
+# How much signal is there amongst the different populations (i.e. what is the lowest p-value per population amongst the selected SNPs)
+
+```{r}
+ex %>%
+    group_by(pop) %>%
+    summarise(minp=min(pval), n=max(n, na.rm=T))
+```
+Strong signal from all ancestry populations. 
+
+# Define heterogeneity test
+
+```{r}
+
+
+## Heterogeneity analysis
+# TODO - allow 
+fixed_effects_meta_analysis <- function(beta_vec, se_vec) {
+    w <- 1 / se_vec^2
+    beta <- sum(beta_vec * w, na.rm=T) / sum(w, na.rm=T)
+    se <- sqrt(1 / sum(w, na.rm=T))
+    pval <- pnorm(abs(beta / se), lower.tail = FALSE)
+    Qj <- w * (beta-beta_vec)^2
+    Q <- sum(Qj, na.rm=T)
+    Qdf <- sum(!is.na(beta_vec))-1
+    if(Qdf == 0) Q <- 0
+    Qjpval <- pchisq(Qj, 1, lower.tail=FALSE)
+    Qpval <- pchisq(Q, Qdf, lower.tail=FALSE)
+    return(list(beta=beta, se=se, Q=Q, Qdf=Qdf, Qpval=Qpval, Qj=Qj, Qjpval=Qjpval))
+}
+
+# check
+# fixed_effects_meta_analysis(c(1,2,3), c(0.3, 0.3, 0.3))
+# fixed_effects_meta_analysis(c(1,2,3), c(0.3, 0.3, 0.3))
+# fixed_effects_meta_analysis(c(1,1,1), c(0.3, 0.3, 0.3))
+# fixed_effects_meta_analysis(c(1,1,NA), c(0.3, 0.3, NA))
+
+#' Test for heterogeneity of effect estimates between populations
+#' 
+#' @description For each SNP this function will provide a Cochran's Q test statistic - a measure of heterogeneity of effect sizes between populations. A low p-value means high heterogeneity.
+#' In addition, for every SNP it gives a per population p-value - this can be interpreted as asking for each SNP is a particular giving an outlier estimate.
+#' 
+#' @param sslist Named list of data frames, one for each population, with at least beta, se and snp columns
+#' 
+#' @return List
+#' - Q = vector of p-values for Cochrane's Q statistic for each SNP
+#' - Qj = Data frame of per-population outlier q values for each SNP
+heterogeneity_test <- function(sslist) {
+    j <- combine_data(sslist)
+    b <- j %>% dplyr::select(starts_with("beta")) %>% as.matrix()
+    se <- j %>% dplyr::select(starts_with("se")) %>% as.matrix()
+    o <- lapply(1:nrow(b), \(i) {
+        fixed_effects_meta_analysis(as.numeric(b[i,]), as.numeric(se[i,]))
+    })
+    Q <- tibble(snpid = j$snpid, Qpval = sapply(o, \(x) x$Qpval))
+    Qj <- lapply(o, \(x) x$Qjpval) %>% do.call(rbind, .) %>% 
+        as_tibble()
+    
+    names(Qj) <- names(sslist)
+    Qj$snpid <- j$snpid
+    return(list(Q=Q, Qj=Qj))
+}
+
+
+combine_data <- function(sslist) {
+    j <- sslist[[1]] %>% select(snpid, beta, se)
+    for(i in 2:length(sslist))
+    {
+        j <- full_join(j, sslist[[i]] %>% select(snpid, beta, se), by="snpid")
+    }
+    j %>% dplyr::select(starts_with("beta"))
+    return(j)
+}
+```
+
+# For each SNP that is present in at least 2 populations, estimate the heterogeneity of effects between the populations. Do this two ways
+
+# - `Q` - global heterogeneity test for the SNP across all populations (Cochrane's Q)
+# - `Qj` - the deviation of each population contributing to the global heterogeneity Q
+
+```{r}
+exl <- lapply(pops, \(x) subset(ex, pop==x) %>% subset(!duplicated(snpid)))
+names(exl) <- pops
+
+o <- heterogeneity_test(exl)
+o$Q$fdr <- p.adjust(o$Q$Qpval, "fdr")
+min(o$Q$fdr)
+```
+Strong evidence of heterogeneity. 
+
+```{r}
+selsnpid <- subset(o$Q, Qpval < 0.05)$snpid
+subset(o$Qj, snpid %in% selsnpid)
+
+gather(as.data.frame(o$Qj), "key", "value", -snpid) %>%
+ggplot(., aes(x=snpid, y=-log10(value))) +
+geom_point(aes(colour=key)) +
+scale_colour_brewer(type="qual")
+
+ex %>%
+    filter(snpid %in% selsnpid) %>%
+    ggplot(., aes(x = beta, y = pop)) +
+    geom_point(aes(colour = pop)) +
+    geom_errorbarh(aes(colour = pop, xmin = beta - se * 1.96, xmax = beta + se * 1.96), height = 0) +
+    facet_grid(snpid ~ .) +
+    geom_vline(xintercept = 0, linetype = "dotted") +
+    scale_colour_brewer(type = "qual") +
+    theme(axis.title.y = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank())
+
+```
+146 SNPs showing evidence of heterogeneity after accounting for multiple testing. 
+
+# Compare effects to see the degree of agreement of smaller pops vs European
+
+```{r}
+a <- subset(ex, pop=="EUR")
+b <- subset(ex, pop != "EUR")
+ab <- inner_join(a, b, by="snpid") %>% filter(pval.x < 5e-8)
+
+nsum <- ex %>%
+    group_by(pop) %>%
+    summarise(minp=min(pval), n=max(n, na.rm=T)) %>%
+    mutate(label = paste0(pop, ", n=", n))
+
+ab <- left_join(ab, subset(nsum, select=c(pop, label)), by=c("pop.y"="pop"))
+
+slope <- lapply(unique(ab$label), function(p){
+    x <- subset(ab, label==p)
+    summary(lm(beta.x ~ 0 + beta.y, data=x, weight=1/se.y^2))$coef %>% as_tibble()  %>%
+    mutate(lab=paste0("b = ", round(Estimate, 2), " (", round(`Std. Error`, 3), ")"))
+}) %>% bind_rows() %>% mutate(label=unique(ab$label))
+slope
+```
+
+Strong slopes for all ancestries. 
+
+```{r}
+ggplot(ab, aes(x=beta.x, y=beta.y)) +
+geom_point() +
+geom_smooth(method="lm") +
+facet_wrap(~ label)
+```
+
+
+# Compare the expected vs observed replication rates - European vs other populations
+
+```{r}
+## expected vs observed
+
+#' Expected vs observed replication rates
+#' 
+#' @description For a set of effects that have discovery and replication betas and SEs, this function determines the extent to which the observed replication rate matches the expected replication rate. 
+#' The expected replication rate is based on the assumption that the replication dataset has the same effect sizes but that the power may be different (e.g. due to allele frequencies or sample sizes) and is reflected in the replication standard errors. 
+#' It assesses replication based on concordance of effect direction across discovery and replication, and p-values surpassing a user-specified p-value threshold.
+#' 
+#' @param b_disc vector of clumped incidence hit effects
+#' @param se_disc the standard errors for incidence effects
+#' @param b_rep corresponding vector of associations in progression
+#' @param se_rep standard errors of effects in progression
+#' @param alpha p-value threshold to check for replication of incidence hits in progression (e.g. try 0.05 or 1e-5)
+expected_vs_observed_replication <- function(b_disc, b_rep, se_disc, se_rep, alpha) {
+    p_sign <- pnorm(-abs(b_disc) / se_disc) * pnorm(-abs(b_disc) / se_rep) + ((1 - pnorm(-abs(b_disc) / se_disc)) * (1 - pnorm(-abs(b_disc) / se_rep)))
+    p_sig <- pnorm(-abs(b_disc) / se_rep + qnorm(alpha / 2)) + (1 - pnorm(-abs(b_disc) / se_rep - qnorm(alpha / 2)))
+    p_rep <- pnorm(abs(b_rep)/se_rep, lower.tail=FALSE)
+    res <- tibble::tibble(
+        nsnp=length(b_disc),
+        metric=c("Sign", "Sign", "P-value", "P-value"),
+        datum=c("Expected", "Observed", "Expected", "Observed"),
+        value=c(sum(p_sign, na.rm=TRUE), sum(sign(b_disc) == sign(b_rep)), sum(p_sig, na.rm=TRUE), sum(p_rep < alpha, na.rm=TRUE)),
+        pdiff=c(NA_real_, binom.test(value[2], nsnp[2], value[1]/nsnp[2])$p.value, NA_real_, binom.test(value[4], nsnp[4], value[3]/nsnp[4])$p.value)
+    )
+    res_per_variant <- tibble(
+        expected_pval = p_sig,
+        observed_pval = p_rep < alpha,
+        replication_fail = expected_pval > 0.95 & ! observed_pval,
+        expected_sign = p_sign,
+        observed_sign = sign(b_disc) == sign(b_rep),
+        sign_fail = expected_sign > 0.95 & ! observed_sign
+    )
+    return(list(res=res, variants=res_per_variant))
+}
+
+
+eores <- lapply(unique(ab$pop.y), function(p){
+    x <- subset(ab, pop.y==p)
+    o <- expected_vs_observed_replication(x$beta.x, x$beta.y, x$se.x, x$se.y, 0.01)
+    o$res$pop <- p
+    o$variants$pop <- p
+    return(o)
+})
+
+lapply(eores, \(x) x$res) %>% bind_rows() %>% subset(metric=="Sign") %>% dplyr::select(pop, nsnp, datum, value, pdiff)
+```
+
+The observed degree of replication of the beta direction is lower than expected for all ancestries.   
+
+```{r}
+lapply(eores, \(x) x$res) %>% bind_rows() %>% subset(metric=="P-value") %>% dplyr::select(pop, nsnp, datum, value, pdiff)
+```
+
+The degree of replication of the p-value is line with expectation for the EAS and SAS populations. However, the AFR and HIS populations are lower than expected. 
