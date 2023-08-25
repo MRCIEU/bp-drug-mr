@@ -24,7 +24,11 @@ Rscript organise_data.r
 Note paths are hardcoded - need to update.
 
 ## Perform analysis
-
+Using LDLc clumped SNPs from the meta-analysis
 ```
-quarto render analyse.qmd
+quarto render ldl_analyse.qmd
+```
+Using LDLc clumped SNPs specific to LDLc drug targets 
+```
+quarto render ldl_analyses.drugtarget.qmd
 ```
