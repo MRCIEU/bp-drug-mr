@@ -18,8 +18,9 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(data.table)
+library(here)
 
-ex <- readRDS("pop_extract_clumped.rds")
+ex <- readRDS(file = here("data","pop_extract_clumped.rds")
 pops <- c("AFR", "EAS", "EUR", "HIS", "SAS")
 head(ex)
 ```
