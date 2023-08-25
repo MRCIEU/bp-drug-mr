@@ -77,7 +77,7 @@ write.csv(extr_clumped, file = "/user/work/ac14629/MRC_network_project/results/l
 
 # Need to extract relevant SNPs from each of the ancestry-specific GWASs
 
-clumped <- fread("/user/work/ac14629/MRC_network_project/results/ldl-analysis/with_BF_meta-analysis_AFR_EAS_EUR_HIS_SAS_LDL_INV_ALL_with_N_1_revised.clumped")
+clumped <- fread(file =here("data", "with_BF_meta-analysis_AFR_EAS_EUR_HIS_SAS_LDL_INV_ALL_with_N_1.clumped"))
 
 sel_rsid <- unique(c(clumped$rsid, extr_clumped$rsid))
 tmp <- tempfile()
@@ -140,4 +140,4 @@ ex <- lapply(ex, standardise) %>%
 
 ex <- left_join(ex, extr_clumped %>% dplyr::select(rsid, Drug, `Target gene`, Function), by = "rsid")
 
-saveRDS(ex, file = "/user/work/ac14629/MRC_network_project/results/ldl-analysis/pop_extract_clumped.rds")
+saveRDS(ex, file =here("data","pop_extract_clumped.rds"))
