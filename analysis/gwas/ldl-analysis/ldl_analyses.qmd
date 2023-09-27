@@ -20,7 +20,7 @@ library(ggplot2)
 library(data.table)
 library(here)
 
-ex <- readRDS(file = here("data","pop_extract_clumped.rds"))
+ex <- readRDS(file = here("analysis/gwas/ldl-analysis/data","pop_extract_clumped.rds"))
 pops <- c("AFR", "EAS", "EUR", "HIS", "SAS")
 head(ex)
 ```
@@ -115,25 +115,30 @@ min(o$Q$fdr)
 Strong evidence of heterogeneity. 
 
 ```{r}
-selsnpid <- subset(o$Q, Qpval < 0.05)$snpid
+selsnpid <- subset(o$Q, p.adjust(Qpval, "bonferroni") < 0.05)$snpid
 subset(o$Qj, snpid %in% selsnpid)
+ol <- tidyr::gather(o$Qj, key="pop", value="Qj", AFR, EAS, EUR, HIS, SAS)
+
+head(ol)
 
 gather(as.data.frame(o$Qj), "key", "value", -snpid) %>%
 ggplot(., aes(x=snpid, y=-log10(value))) +
 geom_point(aes(colour=key)) +
 scale_colour_brewer(type="qual")
-
+set.seed(123)
 ex %>%
-    filter(snpid %in% selsnpid) %>%
+    filter(snpid %in% sample(selsnpid)[1:10]) %>%
+    left_join(., ol, by=c("pop", "snpid")) %>%
     ggplot(., aes(x = beta, y = pop)) +
-    geom_point(aes(colour = pop)) +
+    geom_point(aes(colour = pop, shape=Qj < 0.05)) +
     geom_errorbarh(aes(colour = pop, xmin = beta - se * 1.96, xmax = beta + se * 1.96), height = 0) +
     facet_grid(snpid ~ .) +
     geom_vline(xintercept = 0, linetype = "dotted") +
     scale_colour_brewer(type = "qual") +
     theme(axis.title.y = element_blank(),
           axis.text.y = element_blank(),
-          axis.ticks.y = element_blank())
+          axis.ticks.y = element_blank(),
+          strip.text.y=element_text(angle=0))
 
 ```
 146 SNPs showing evidence of heterogeneity after accounting for multiple testing. 
@@ -226,4 +231,4 @@ The observed degree of replication of the beta direction is lower than expected 
 lapply(eores, \(x) x$res) %>% bind_rows() %>% subset(metric=="P-value") %>% dplyr::select(pop, nsnp, datum, value, pdiff)
 ```
 
-The degree of replication of the p-value is line with expectation for the EAS and SAS populations. However, the AFR and HIS populations are lower than expected. 
+The degree of replication of the p-value is in line with expectation for the EAS and SAS populations. However, the AFR and HIS populations are lower than expected. 

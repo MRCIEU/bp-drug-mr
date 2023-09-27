@@ -17,8 +17,10 @@ format:
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(data.table)
+library(here)
 
-ex <- readRDS(file = here("data","pop_extract_clumped.rds"))
+ex <- readRDS(file = here("analysis/gwas/ldl-analysis/data","pop_extract_clumped.rds"))
 ex <- ex[!is.na(ex$Drug), ]
 pops <- c("AFR", "EAS", "EUR", "HIS", "SAS")
 head(ex)
@@ -118,7 +120,7 @@ Strong evidence of heterogeneity.
 ```{r}
 selsnpid <- subset(o$Q, Qpval < 0.05)$snpid
 subset(o$Qj, snpid %in% selsnpid)
-
+ol <- tidyr::gather(o$Qj, key="pop", value="Qj", AFR, EAS, EUR, HIS, SAS)
 
 gather(as.data.frame(o$Qj), "key", "value", -snpid) %>%
 ggplot(., aes(x=snpid, y=-log10(value))) +
@@ -127,10 +129,11 @@ scale_colour_brewer(type="qual")
 
 ex %>%
     filter(snpid %in% selsnpid) %>%
+    left_join(., ol, by=c("pop", "snpid")) %>%
     ggplot(., aes(x = beta, y = pop)) +
-    geom_point(aes(colour = pop)) +
+    geom_point(aes(colour = pop, shape=Qj < 0.05)) +
     geom_errorbarh(aes(colour = pop, xmin = beta - se * 1.96, xmax = beta + se * 1.96), height = 0) +
-    facet_grid(snpid ~ .) +
+    facet_grid(`Target gene` + snpid ~ .) +
     geom_vline(xintercept = 0, linetype = "dotted") +
     scale_colour_brewer(type = "qual") +
     theme(axis.title.y = element_blank(),
