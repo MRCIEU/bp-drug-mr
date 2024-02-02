@@ -35,4 +35,3 @@ quarto render ldl_analyses.drugtarget.qmd
 
 ## Follow-up analysis examining heterogenous SNPs across ancestries
 GLGC-Examination-of-heteogenous-SNPs-across-populations.html 
-```
