@@ -1,0 +1,168 @@
+---
+title: "GLGC - Examination of heterogenous SNPs across populations"
+author: "A.Chong"
+date: "2024-02-01"
+output: html_document
+---
+
+**Outline**
+
++ 1. `organise_data.r` extracts LDL-lowering drug target regions from each population
++ 2. Estimate Cochrane's Q for each SNP across populations to identify any SNPs that have differential effects
++ 3. Examine differences in SNP effect size for heterogenous SNPs across populations 
+
+
+Load organised data
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+ex <- readRDS("C:/Users/ac14629/OneDrive - University of Bristol/MRC_cross_population_network/LDL_analysis/pop_extract_clumped.rds")
+ex <- ex[!is.na(ex$Drug), ]
+pops <- c("AFR", "EAS", "EUR", "HIS", "SAS")
+
+print(ex)
+```
+**Define heterogeneity test**
+```{r}
+
+
+## Heterogeneity analysis
+# TODO - allow 
+fixed_effects_meta_analysis <- function(beta_vec, se_vec) {
+    w <- 1 / se_vec^2
+    beta <- sum(beta_vec * w, na.rm=T) / sum(w, na.rm=T)
+    se <- sqrt(1 / sum(w, na.rm=T))
+    pval <- pnorm(abs(beta / se), lower.tail = FALSE)
+    Qj <- w * (beta-beta_vec)^2
+    Q <- sum(Qj, na.rm=T)
+    Qdf <- sum(!is.na(beta_vec))-1
+    if(Qdf == 0) Q <- 0
+    Qjpval <- pchisq(Qj, 1, lower.tail=FALSE)
+    Qpval <- pchisq(Q, Qdf, lower.tail=FALSE)
+    return(list(beta=beta, se=se, Q=Q, Qdf=Qdf, Qpval=Qpval, Qj=Qj, Qjpval=Qjpval))
+}
+
+#' Test for heterogeneity of effect estimates between populations
+#' 
+#' @description For each SNP this function will provide a Cochran's Q test statistic - a measure of heterogeneity of effect sizes between populations. A low p-value means high heterogeneity.
+#' In addition, for every SNP it gives a per population p-value - this can be interpreted as asking for each SNP is a particular giving an outlier estimate.
+#' 
+#' @param sslist Named list of data frames, one for each population, with at least beta, se and snp columns
+#' 
+#' @return List
+#' - Q = vector of p-values for Cochrane's Q statistic for each SNP
+#' - Qj = Data frame of per-population outlier q values for each SNP
+heterogeneity_test <- function(sslist) {
+    j <- combine_data(sslist)
+    b <- j %>% dplyr::select(starts_with("beta")) %>% as.matrix()
+    se <- j %>% dplyr::select(starts_with("se")) %>% as.matrix()
+    o <- lapply(1:nrow(b), \(i) {
+        fixed_effects_meta_analysis(as.numeric(b[i,]), as.numeric(se[i,]))
+    })
+    Q <- tibble(snpid = j$snpid, Qpval = sapply(o, \(x) x$Qpval))
+    Qj <- lapply(o, \(x) x$Qjpval) %>% do.call(rbind, .) %>% 
+        as_tibble()
+    
+    names(Qj) <- names(sslist)
+    Qj$snpid <- j$snpid
+    return(list(Q=Q, Qj=Qj))
+}
+
+
+combine_data <- function(sslist) {
+    j <- sslist[[1]] %>% select(snpid, beta, se)
+    for(i in 2:length(sslist))
+    {
+        j <- full_join(j, sslist[[i]] %>% select(snpid, beta, se), by="snpid")
+    }
+    j %>% dplyr::select(starts_with("beta"))
+    return(j)
+}
+```
+
+*For each SNP that is present in at least 2 populations, estimate the heterogeneity of effects between the populations. Do this two ways*
+
+*- `Q` - global heterogeneity test for the SNP across all populations (Cochrane's Q)*
+*- `Qj` - the deviation of each population contributing to the global heterogeneity Q*
+
+```{r}
+exl <- lapply(pops, \(x) subset(ex, pop==x) %>% subset(!duplicated(snpid)))
+names(exl) <- pops
+
+o <- heterogeneity_test(exl)
+o$Q$fdr <- p.adjust(o$Q$Qpval, "fdr")
+min(o$Q$fdr)
+```
+
+Strong evidence of heterogeneity. 
+
+```{r}
+selsnpid <- subset(o$Q, Qpval < 0.05)$snpid
+subset(o$Qj, snpid %in% selsnpid)
+
+
+gather(as.data.frame(o$Qj), "key", "value", -snpid) %>%
+ggplot(., aes(x=snpid, y=-log10(value))) +
+geom_point(aes(colour=key)) +
+scale_colour_brewer(type="qual")
+
+ex %>%
+    filter(snpid %in% selsnpid) %>%
+    ggplot(., aes(x = beta, y = pop)) +
+    geom_point(aes(colour = pop)) +
+    geom_errorbarh(aes(colour = pop, xmin = beta - se * 1.96, xmax = beta + se * 1.96), height = 0) +
+    facet_grid(snpid ~ .) +
+    geom_vline(xintercept = 0, linetype = "dotted") +
+    scale_colour_brewer(type = "qual") +
+    theme(axis.title.y = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank())
+
+```
+
+**Examine why there are differences in SNP effect size in AFR population compared to the other populations by:** 
+** - Plot region of interest** 
+** - Check allele frequency against AFR reference panel** 
+
+```{r}
+dat <- read.table("C:/Users/ac14629/OneDrive - University of Bristol/MRC_cross_population_network/LDL_analysis/GLGC_AFR_metaanalysis_chr1_5_with_ref_panel.results", header = T)
+dat_1 <- dat %>% filter(CHROM==1)
+dat_5 <- dat %>% filter(CHROM==5)
+```
+
+**Compare GLGC allele frequencies for SNPs of interest with 1000G AFR reference panel** 
+```{r}
+snps <- c("rs41294821","rs1165287", "rs4704210")
+
+af <- dat %>%
+  filter(rsID %in% snps) %>%
+  select("rsID", "CHROM", "POS_b37", "REF", "ALT", "POOLED_ALT_AF", "MAF_AFR_REF", "EFFECT_SIZE", "SE", "pvalue_GC", "MAF_AFR_REF")
+
+print(af)
+```
+
+The all SNPs show similar allele frequencies to the AFR reference allele panel (i.e. POOLED_ALT_AF and MAF_AFR_REF).
+
+**Allele frequency: Chr 1 region**
+```{r}
+plot_af_1 <- ggplot(dat_1, aes(x=POOLED_ALT_AF, y =MAF_AFR_REF)) + 
+  geom_point() +
+  theme_minimal()
+
+print(plot_af_1)
+```
+
+Allele frequency for GLGC AFR and AFR reference panel in chromosome 1 looks consistent. 
+
+**Allele frequency: Chr 5 region** 
+```{r}
+plot_af_5 <- ggplot(dat_5, aes(x=POOLED_ALT_AF, y =MAF_AFR_REF)) + 
+  geom_point() +
+  theme_minimal()
+
+print(plot_af_5)
+```
+
+Allele frequency for GLGC AFR and AFR reference panel in chromosome 5 looks consistent. 
