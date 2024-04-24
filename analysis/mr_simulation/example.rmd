@@ -1,0 +1,114 @@
+---
+title: Regional MVMR anlaysis
+author: Gibran Hemani
+---
+
+Simulate regional summary data with LD matrix
+
+First get LD matrix for a region for each ancestry
+
+```{r}
+library(simulateGP)
+library(dplyr)
+
+load(url("https://github.com/explodecomputer/simulateGP/raw/master/data/ldetect.rdata"))
+head(ldetect)
+a <- subset(ldetect, pop == "EUR") %>% mutate(len=stop-start) %>% arrange(len) %>% slice(100)
+
+eurbfile <- "/Users/gh13047/repo/opengwas-api-internal/opengwas-api/app/ld_files/EUR"
+afrbfile <- "/Users/gh13047/repo/opengwas-api-internal/opengwas-api/app/ld_files/AFR"
+easbfile <- "/Users/gh13047/repo/opengwas-api-internal/opengwas-api/app/ld_files/EAS"
+
+eurld <- get_ld(a$chr, a$start, a$stop, eurbfile)
+afrld <- get_ld(a$chr, a$start, a$stop, afrbfile)
+easld <- get_ld(a$chr, a$start, a$stop, easbfile)
+```
+
+Then simulate summary data
+
+- 10 causal variants for trait 1
+- Those variants have an effect on trait 2 + 3 other variants
+- Those variants have an effect on trait 3 + 3 other variants
+- Those variants have an effect on outcome + 3 other variants
+
+```{r}
+rsids <- Reduce(intersect, list(eurld$map$snp, afrld$map$snp, easld$map$snp))
+causalx1 <- sample(rsids, 10)
+causalx2 <- sample(rsids, 3)
+causalx3 <- sample(rsids, 3)
+causaly <- sample(rsids, 3)
+
+paramseurx1 <- eurld$map %>%
+    generate_gwas_params(h2=0, S=0, Pi=0) %>%
+    mutate(beta = case_when(snp %in% causalx1 ~ 0.05, TRUE ~ 0))
+
+paramseurx2 <- paramseurx1 %>% mutate(beta = beta * -0.7) %>% 
+    mutate(beta = case_when(snp %in% causalx2 ~ beta + 0.05, TRUE ~ beta))
+
+paramseurx3 <- paramseurx1 %>% mutate(beta = beta * 0.5) %>% 
+    mutate(beta = case_when(snp %in% causalx3 ~ beta + 0.05, TRUE ~ beta))
+
+paramseury <- paramseurx1 %>% mutate(beta = beta * 0.5) %>% 
+    mutate(beta = case_when(snp %in% causaly ~ beta + 0.05, TRUE ~ beta))
+
+sseurx1 <- paramseurx1 %>% generate_gwas_ss(nid=100000, ldobj=eurld)
+sseurx2 <- paramseurx2 %>% generate_gwas_ss(nid=100000, ldobj=eurld)
+sseurx3 <- paramseurx3 %>% generate_gwas_ss(nid=100000, ldobj=eurld)
+sseury <- paramseury %>% generate_gwas_ss(nid=100000, ldobj=eurld)
+```
+
+Perform analysis using PCs
+
+```{r}
+# Choose a region with <=4000 SNPs otherwise it gets very slow
+# Make sure that there is complete overlap of SNPs across the traits (e.g. remove SNPs that aren't present in all)
+# Do this procedure for each ancestry separately
+
+# Code below
+# sseurx1 = summary stats for trait 1 (e.g. LDL)
+# sseurx2 = summary stats for trait 2 (e.g. HDL)
+# sseurx3 = summary stats for trait 3 (e.g. Trigs)
+# sseury = summary stats for outcome (e.g. CHD)
+
+# bhat = effect estimate
+# se = standard error
+
+# The LD matrix should be harmonised with the data, e.g. same set of SNPs, in the same order, and with the same alleles
+# e.g. to make the alleles the same create a vector 'flip' that is 1 if the LD + allele is the same as the beta effect allele, and 0 if not, then
+# m <- flip %*% t(flip)
+# ld <- ld * m
+
+# Get PCs of the LD matrix
+eurldpc <- princomp(eurld$ld)
+i <- which(cumsum(eurldpc$sdev) / sum(eurldpc$sdev) >= 0.99)[1]
+i
+eurx1comp <- (sseurx1$bhat) %*% eurldpc$loadings[,1:i] %>% as.numeric()
+eurx2comp <- (sseurx2$bhat) %*% eurldpc$loadings[,1:i] %>% as.numeric()
+eurx3comp <- (sseurx3$bhat) %*% eurldpc$loadings[,1:i] %>% as.numeric()
+eurycomp <- (sseury$bhat) %*% eurldpc$loadings[,1:i] %>% as.numeric()
+
+# Multivariable MR (unweighted)
+summary(lm(eurycomp ~ eurx1comp + eurx2comp + eurx3comp))
+
+# Univariable MR (unweighted)
+summary(lm(eurycomp ~ eurx1comp))
+
+# To do weights
+Omega <- sseury$se %o% sseury$se * eurld$ld
+pcOmega <- t(eurldpc$loadings[,1:i]) %*% Omega %*% eurldpc$loadings[,1:i]
+
+# Multivariable MR (weighted)
+summary(lm(eurycomp ~ eurx1comp + eurx2comp + eurx3comp, weight = 1/diag(pcOmega)^2))
+
+# Univariable MR (unweighted)
+summary(lm(eurycomp ~ eurx1comp, weight = 1/diag(pcOmega)^2))
+```
+
+
+Compare using wald ratio for a single snp in univariable MR
+
+```{r}
+library(TwoSampleMR)
+i <- which.min(sseurx1$pval)
+mr_wald_ratio(sseurx1$bhat[i], sseury$bhat[i], sseurx1$se[i], sseury$se[i]) %>% as_tibble %>% mutate(t=b/se)
+```
