@@ -88,20 +88,20 @@ eurx3comp <- (sseurx3$bhat) %*% eurldpc$loadings[,1:i] %>% as.numeric()
 eurycomp <- (sseury$bhat) %*% eurldpc$loadings[,1:i] %>% as.numeric()
 
 # Multivariable MR (unweighted)
-summary(lm(eurycomp ~ eurx1comp + eurx2comp + eurx3comp))
+summary(lm(eurycomp ~ 0 + eurx1comp + eurx2comp + eurx3comp))
 
 # Univariable MR (unweighted)
-summary(lm(eurycomp ~ eurx1comp))
+summary(lm(eurycomp ~ 0 + eurx1comp))
 
 # To do weights
 Omega <- sseury$se %o% sseury$se * eurld$ld
 pcOmega <- t(eurldpc$loadings[,1:i]) %*% Omega %*% eurldpc$loadings[,1:i]
 
 # Multivariable MR (weighted)
-summary(lm(eurycomp ~ eurx1comp + eurx2comp + eurx3comp, weight = 1/diag(pcOmega)^2))
+summary(lm(eurycomp ~ 0 + eurx1comp + eurx2comp + eurx3comp, weight = 1/diag(pcOmega)^2))
 
 # Univariable MR (unweighted)
-summary(lm(eurycomp ~ eurx1comp, weight = 1/diag(pcOmega)^2))
+summary(lm(eurycomp ~ 0 + eurx1comp, weight = 1/diag(pcOmega)^2))
 ```
 
 
