@@ -1,0 +1,80 @@
+---
+title: "GLGC cross-ancestry LDLc GWAS - Examining the potential differences in phenotype
+  scaling"
+author: "A.Chong"
+date: "2024-02-01"
+output: html_document
+---
+
+**Outline**
+
+* Examine the mean and standard deviation of LDL cholesterol across cohorts by: 
+  + 1. Plot mean and SD for each cohort.
+  + 2. Perform Kruskal-Wallis test to compare means across cohort.
+  + 3. Examine SNP-exposure association plots for each ancestry. 
+  + 4. Examine Q-Q plots for each ancestry.
+
+Read in relevant packages 
+```{r}
+library(ggplot2)
+library(car)
+```
+
+Read in LDLc data 
+```{r}
+dat <- read.table("C:/Users/ac14629/OneDrive - University of Bristol/MRC_cross_population_network/LDL_analysis/GLGC_LDLc_mean_SD_cohorts.txt", header = T, sep = "\t")
+head(dat)
+```
+**Plot mean and SD for each cohort**
+
+```{r, echo=FALSE,results='hide',fig.keep='all'}
+p <- ggplot(dat, aes(x = Cohort, y = mean_ldl)) + 
+  geom_point()+
+  geom_errorbar(aes(ymin = mean_ldl-mean_ldl_SD, ymax = mean_ldl+mean_ldl_SD))
+  theme_minimal()
+p
+```
+
+**Compare difference in means using Kruskal-Wallis test**
+```{r}
+res_kw <- kruskal.test(mean_ldl~Cohort, data = dat)
+print(res_kw)
+```
+Evidence suggests no difference in mean between cohorts (P > 0.05)
+
+**SNP-exposure association plots**
+
+```{r, echo=FALSE, out.width="50%"}
+knitr::include_graphics("C:/Users/ac14629/OneDrive - University of Bristol/MRC_cross_population_network/GLGC/per_ancestry_snp_ldlc_regression.png")
+```
+
+SNP-exposure association across ancestries look consistent with all slopes around 1 and intercepts only slightly above 0.
+
+**Q-Q plots per ancestry** 
+
+AFR
+```{r, echo=FALSE, out.width="50%"}
+knitr::include_graphics("C:/Users/ac14629/OneDrive - University of Bristol/MRC_cross_population_network/GLGC/glgc_afr_qq.png")
+```
+
+EAS
+```{r,echo=FALSE,out.width="50%"}
+knitr::include_graphics("C:/Users/ac14629/OneDrive - University of Bristol/MRC_cross_population_network/GLGC/glgc_eas_qq.png")
+```
+
+EUR 
+```{r,echo=FALSE, out.width="50%"}
+knitr::include_graphics("C:/Users/ac14629/OneDrive - University of Bristol/MRC_cross_population_network/GLGC/glgc_eur_qq.png")
+```
+
+HIS
+```{r,echo=FALSE,out.width="50%"}
+knitr::include_graphics("C:/Users/ac14629/OneDrive - University of Bristol/MRC_cross_population_network/GLGC/glgc_his_qq.png")
+```
+
+SAS 
+```{r,echo=FALSE, out.width="50%"}
+knitr::include_graphics("C:/Users/ac14629/OneDrive - University of Bristol/MRC_cross_population_network/GLGC/glgc_sas_qq.png")
+```
+
+Across ancestries, shape of Q-Q plot curve looks similar and slopes look consistent.
