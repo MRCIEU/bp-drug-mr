@@ -12,13 +12,14 @@ lipid <- readRDS("lipid_pop_extract_common_snps_mvmr_clumped.rds")
 lipid <- lipid %>% rename(
 	SNP = rsid, 
 	exposure = trait, 
-	id.exposure = pop, 
+	id.exposure = trait, 
 	effect_allele.exposure = ea, 
 	other_allele.exposure = oa, 
 	eaf.exposure = eaf, 
 	beta.exposure = beta, 
 	se.exposure = se, 
-	pval.exposure = pval) 
+	pval.exposure = pval, 
+	pop = pop) 
 
 lipid <- lipid %>% select(SNP, exposure, id.exposure, effect_allele.exposure, other_allele.exposure, eaf.exposure, beta.exposure, se.exposure, pval.exposure) 
 
