@@ -1,15 +1,26 @@
 ---
 title: Regional MVMR anlaysis
 author: Gibran Hemani
+output:
+  html_document:
+    self_contained: yes
 ---
+
+```{r}
+library(knitr)
+library(simulateGP)
+library(dplyr)
+library(TwoSampleMR)
+
+opts_chunk$set(cache=TRUE)
+```
+
 
 Simulate regional summary data with LD matrix
 
 First get LD matrix for a region for each ancestry
 
 ```{r}
-library(simulateGP)
-library(dplyr)
 
 load(url("https://github.com/explodecomputer/simulateGP/raw/master/data/ldetect.rdata"))
 head(ldetect)
@@ -108,7 +119,6 @@ summary(lm(eurycomp ~ 0 + eurx1comp, weight = 1/diag(pcOmega)^2))
 Compare using wald ratio for a single snp in univariable MR
 
 ```{r}
-library(TwoSampleMR)
 i <- which.min(sseurx1$pval)
 mr_wald_ratio(sseurx1$bhat[i], sseury$bhat[i], sseurx1$se[i], sseury$se[i]) %>% as_tibble %>% mutate(t=b/se)
 ```
