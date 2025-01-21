@@ -10,7 +10,7 @@ library(MendelianRandomization)
 # Get LD matrix
 load(url("https://github.com/explodecomputer/simulateGP/raw/master/data/ldetect.rdata"))
 head(ldetect)
-a <- subset(ldetect, pop == "AFR" & chr == "chr5") %>%
+a <- subset(ldetect, pop == "EUR" & chr == "chr5") %>%
      mutate(len = stop - start) %>%
      arrange(len) %>%
      slice(100)
@@ -71,25 +71,24 @@ sas_hp <- fread("/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/hp
 ## Select drug target gene region 
 hmgcr_ldlc_afr <- afr_ldlc %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
 hmgcr_ldlc_amr <- amr_ldlc %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_ldlc_eas <- eas_ldlc %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_ldlc_eur <- eur_ldlc %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_ldlc_sas <- sas_ldlc %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_ldlc_ugr <- amr_ldlc %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
 
-hmgcr_ldlc_eas <- eas_ldlc %>% filter(CHR == 5, BP >= 74632154, BP <= 74659826)
-hmgcr_ldlc_eur <- eur_ldlc %>% filter(CHR == 5, BP >= 74632154, BP <= 74659826)
-hmgcr_ldlc_sas <- sas_ldlc %>% filter(chr == 5, pos >= 74632154, pos <= 74659826)
-hmgcr_ldlc_ugr <- ugr_ldlc %>% filter(chr == 5, pos >= 74632154, pos <= 74659826)
+hmgcr_hdl_afr <- afr_hdl %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_hdl_amr <- amr_hdl %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_hdl_eas <- eas_hdl %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_hdl_eur <- eur_hdl %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_hdl_sas <- sas_hdl %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_hdl_ugr <- amr_hdl %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
 
-hmgcr_hdl_afr <- afr_hdl %>% filter(chr == 5, pos >= 74632154, pos <= 74659826)
-hmgcr_hdl_amr <- amr_hdl %>% filter(CHR == 5, POS >= 74632154, POS <= 74659826)
-hmgcr_hdl_eas <- eas_hdl %>% filter(CHR == 5, BP >= 74632154, BP <= 74659826)
-hmgcr_hdl_eur <- eur_hdl %>% filter(CHR == 5, BP >= 74632154, BP <= 74659826)
-hmgcr_hdl_sas <- sas_hdl %>% filter(chr == 5, pos >= 74632154, pos <= 74659826)
-hmgcr_hdl_ugr <- ugr_hdl %>% filter(chr == 5, pos >= 74632154, pos <= 74659826)
-
-hmgcr_tg_afr <- afr_tg %>% filter(chr == 5, pos >= 74632154, pos <= 74659826)
-hmgcr_tg_amr <- amr_tg %>% filter(CHR == 5, POS >= 74632154, POS <= 74659826)
-hmgcr_tg_eas <- eas_tg %>% filter(CHR == 5, BP >= 74632154, BP <= 74659826)
-hmgcr_tg_eur <- eur_tg %>% filter(CHR == 5, BP >= 74632154, BP <= 74659826)
-hmgcr_tg_sas <- sas_tg %>% filter(chr == 5, pos >= 74632154, pos <= 74659826)
-hmgcr_tg_ugr <- ugr_tg %>% filter(chr == 5, pos >= 74632154, pos <= 74659826)
+hmgcr_tg_afr <- afr_tg %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_tg_amr <- amr_tg %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_tg_eas <- eas_tg %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_tg_eur <- eur_tg %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_tg_sas <- sas_tg %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_tg_ugr <- amr_tg %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
 
 ## Get common snp ids
 common_snp_ids_afr <- Reduce(intersect, list(hmgcr_ldlc_afr$snp.id, 
@@ -158,40 +157,136 @@ hmgcr_ldlc_ugr_common <- hmgcr_ldlc_ugr[hmgcr_ldlc_ugr$snp.id %in% common_snp_id
 hmgcr_hdl_ugr_common <- hmgcr_hdl_ugr[hmgcr_hdl_ugr$snp.id %in% common_snp_ids_ugr, ]
 hmgcr_tg_ugr_common <- hmgcr_tg_ugr[hmgcr_tg_ugr$snp.id %in% common_snp_ids_ugr, ]
 
-## Count number of rows based on length of one of the datasets
-n_rows_afr <- length(hmgcr_ldlc_afr$Est)
-n_rows_amr <- length(hmgcr_ldlc_amr$BETA)
-n_rows_eas <- length(hmgcr_ldlc_eas$BETA)
-n_rows_eur <- length(hmgcr_ldlc_eur$BETA)
-n_rows_sas <- length(hmgcr_ldlc_sas$Est)
+# Subset matrix by matching to GWAS common SNPs 
+afr_map_subset <- afrld$map %>%
+  filter(snp %in% common_snp_ids_afr)
+afr_selected_indices <- which(afrld$map$snp %in% common_snp_ids_afr)
+afr_ld_subset <- afrld$ld[selected_indices, selected_indices]
 
-## Subset LD matrix by number of rows to allow for the same dimensions
-afrld_subset <- afrld$ld[1:n_rows_afr]
-amrld_subset <- amrld$ld[1:n_rows_amr]
-easld_subset <- easld$ld[1:n_rows_eas]
-eurld_subset <- eurld$ld[1:n_rows_eur]
-sasld_subset <- sasld$ld[1:n_rows_sas]
+amr_map_subset <- amrld$map %>%
+  filter(snp %in% common_snp_ids_amr)
+amr_selected_indices <- which(amrld$map$snp %in% common_snp_ids_amr)
+amr_ld_subset <- amrld$ld[selected_indices, selected_indices]
+
+eas_map_subset <- easld$map %>%
+  filter(snp %in% common_snp_ids_eas)
+eas_selected_indices <- which(easld$map$snp %in% common_snp_ids_eas)
+eas_ld_subset <- easld$ld[selected_indices, selected_indices]
+
+eur_map_subset <- eurld$map %>%
+  filter(snp %in% common_snp_ids_eur)
+eur_selected_indices <- which(eurld$map$snp %in% common_snp_ids_eur)
+eur_ld_subset <- eurld$ld[selected_indices, selected_indices]
+
+sas_map_subset <- sasld$map %>%
+  filter(snp %in% common_snp_ids_sas)
+sas_selected_indices <- which(sasld$map$snp %in% common_snp_ids_sas)
+sas_ld_subset <- sasld$ld[selected_indices, selected_indices]
+
+ugr_map_subset <- afrld$map %>%
+  filter(snp %in% common_snp_ids_ugr)
+ugr_selected_indices <- which(afrld$map$snp %in% common_snp_ids_ugr)
+ugr_ld_subset <- afrld$ld[selected_indices, selected_indices]
+
+# Ensure that GWASs and matrix have the same dimensions 
+hmgcr_ldlc_afr_common <- hmgcr_ldlc_afr_common %>%
+  filter(variant.id %in% afr_map_subset$snp)
+hmgcr_hdl_afr_common <- hmgcr_hdl_afr_common %>%
+  filter(variant.id %in% afr_map_subset$snp)
+hmgcr_tg_afr_common <- hmgcr_tg_afr_common %>%
+  filter(variant.id %in% afr_map_subset$snp)
+afr_chd_common <- afr_chd_common %>%
+  filter(variant.id %in% afr_map_subset$snp)
+afr_stroke_common <- afr_stroke_common %>%
+  filter(variant.id %in% afr_map_subset$snp)
+afr_hp_common <- afr_hp_common %>%
+  filter(variant.id %in% afr_map_subset$snp)
+
+hmgcr_ldlc_amr_common <- hmgcr_ldlc_amr_common %>%
+  filter(variant.id %in% amr_map_subset$snp)
+hmgcr_hdl_amr_common <- hmgcr_hdl_amr_common %>%
+  filter(variant.id %in% amr_map_subset$snp)
+hmgcr_tg_amr_common <- hmgcr_tg_amr_common %>%
+  filter(variant.id %in% amr_map_subset$snp)
+amr_chd_common <- amr_chd_common %>%
+  filter(variant.id %in% amr_map_subset$snp)
+amr_stroke_common <- amr_stroke_common %>%
+  filter(variant.id %in% amr_map_subset$snp)
+amr_hp_common <- amr_hp_common %>%
+  filter(variant.id %in% amr_map_subset$snp)
+
+hmgcr_ldlc_eas_common <- hmgcr_ldlc_eas_common %>%
+  filter(variant.id %in% eas_map_subset$snp)
+hmgcr_hdl_eas_common <- hmgcr_hdl_eas_common %>%
+  filter(variant.id %in% eas_map_subset$snp)
+hmgcr_tg_eas_common <- hmgcr_tg_eas_common %>%
+  filter(variant.id %in% eas_map_subset$snp)
+eas_chd_common <- eas_chd_common %>%
+  filter(variant.id %in% eas_map_subset$snp)
+eas_stroke_common <- eas_stroke_common %>%
+  filter(variant.id %in% eas_map_subset$snp)
+eas_hp_common <- eas_hp_common %>%
+  filter(variant.id %in% eas_map_subset$snp)
+
+hmgcr_ldlc_eur_common <- hmgcr_ldlc_eur_common %>%
+  filter(variant.id %in% eur_map_subset$snp)
+hmgcr_hdl_eur_common <- hmgcr_hdl_eur_common %>%
+  filter(variant.id %in% eur_map_subset$snp)
+hmgcr_tg_eur_common <- hmgcr_tg_eur_common %>%
+  filter(variant.id %in% eur_map_subset$snp)
+eur_chd_common <- eur_chd_common %>%
+  filter(variant.id %in% eur_map_subset$snp)
+eur_stroke_common <- eur_stroke_common %>%
+  filter(variant.id %in% eur_map_subset$snp)
+eur_hp_common <- eur_hp_common %>%
+  filter(variant.id %in% afr_map_subset$snp)
+
+hmgcr_ldlc_sas_common <- hmgcr_ldlc_sas_common %>%
+  filter(variant.id %in% sas_map_subset$snp)
+hmgcr_hdl_sas_common <- hmgcr_hdl_sas_common %>%
+  filter(variant.id %in% sas_map_subset$snp)
+hmgcr_tg_sas_common <- hmgcr_tg_sas_common %>%
+  filter(variant.id %in% sas_map_subset$snp)
+sas_chd_common <- sas_chd_common %>%
+  filter(variant.id %in% sas_map_subset$snp)
+sas_stroke_common <- sas_stroke_common %>%
+  filter(variant.id %in% sas_map_subset$snp)
+sas_hp_common <- sas_hp_common %>%
+  filter(variant.id %in% afr_map_subset$snp)
+
+hmgcr_ldlc_ugr_common <- hmgcr_ldlc_ugr_common %>%
+  filter(variant.id %in% ugr_map_subset$snp)
+hmgcr_hdl_ugr_common <- hmgcr_hdl_ugr_common %>%
+  filter(variant.id %in% ugr_map_subset$snp)
+hmgcr_tg_ugr_common <- hmgcr_tg_ugr_common %>%
+  filter(variant.id %in% ugr_map_subset$snp)
+ugr_chd_common <- afr_chd_common %>%
+  filter(variant.id %in% ugr_map_subset$snp)
+ugr_stroke_common <- afr_stroke_common %>%
+  filter(variant.id %in% ugr_map_subset$snp)
+ugr_hp_common <- afr_hp_common %>%
+  filter(variant.id %in% ugr_map_subset$snp)
 
 # Harmonise matrix with data 
-flip <- ifelse(afrld$map$alt == hmgcr_ldlc_afr$effect.allele, 1, 0)
+flip <- ifelse(afr_map_subset == hmgcr_ldlc_afr_common$effect.allele, 1, 0)
 m <- flip %*% t(flip)
-afrld <- afrld$ld * m
+afrld <- afr_ld_subset * m
 
-flip <- ifelse(amrld$map$alt == hmgcr_ldlc_amr$A1, 1, 0)
+flip <- ifelse(amr_map_subset == hmgcr_ldlc_amr_common$A1, 1, 0)
 m <- flip %*% t(flip)
-amrld <- amrld$ld * m
+amrld <- amr_ld_subset * m
 
-flip <- ifelse(easld$map$alt == hmgcr_ldlc_eas$EA, 1, 0)
+flip <- ifelse(eas_map_subset == hmgcr_ldlc_eas_common$EA, 1, 0)
 m <- flip %*% t(flip)
-easld <- easld$ld * m
+easld <- eas_ld_subset * m
 
-flip <- ifelse(eurld$map$alt == hmgcr_ldlc_eur$ALLELE1, 1, 0)
+flip <- ifelse(eur_map_subset == hmgcr_ldlc_eur_common$ALLELE1, 1, 0)
 m <- flip %*% t(flip)
-eurld <- eurld$ld * m
+eurld <- eur_ld_subset * m
 
-flip <- ifelse(sasld$map$alt == hmgcr_ldlc_sas$effect.allele, 1, 0)
+flip <- ifelse(sas_map_subset == hmgcr_ldlc_sas_common$effect.allele, 1, 0)
 m <- flip %*% t(flip)
-sasld <- sasld$ld * m
+sasld <- sas_ld_subset * m
 
 ## MV-PCA method (Batool et al. 2022) 
 
