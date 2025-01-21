@@ -15,18 +15,17 @@ a <- subset(ldetect, pop == "AFR" & chr == "chr5") %>%
      arrange(len) %>%
      slice(100)
 
-
 afrbfile <- "/user/work/ac14629/MRC_network_project/data/UKB/LD_ref_dataset/AFR"
 amrbfile <- "/user/work/ac14629/MRC_network_project/data/UKB/LD_ref_dataset/AMR"
 easbfile <- "/user/work/ac14629/MRC_network_project/data/UKB/LD_ref_dataset/EAS"
 eurbfile <- "/user/work/ac14629/MRC_network_project/data/UKB/LD_ref_dataset/EUR"
 sasbfile <- "/user/work/ac14629/MRC_network_project/data/UKB/LD_ref_dataset/SAS"
 
-afrld <- get_ld(a$chr, a$start, a$stop, afrbfile)
-amrld <- get_ld(a$chr, a$start, a$stop, afrbfile)
-easld <- get_ld(a$chr, a$start, a$stop, easbfile)
-eurld <- get_ld(a$chr, a$start, a$stop, eurbfile)
-sasld <- get_ld(a$chr, a$start, a$stop, sasbfile)
+afrld <- get_ld(a$chr, from=72465174, to=77176458, afrbfile)
+amrld <- get_ld(a$chr, from=72465174, to=77176458, amrbfile)
+easld <- get_ld(a$chr, from=72465174, to=77176458, easbfile)
+eurld <- get_ld(a$chr, from=72465174, to=77176458, eurbfile)
+sasld <- get_ld(a$chr, from=72465174, to=77176458, sasbfile)
 
 ## Read in summary statistics for lipid traits
 afr_ldlc <- fread("/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/ldlc/ukb_afr_ldlc_common_snps_formatted.txt")
@@ -70,8 +69,9 @@ eur_hp <- fread("/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/hp
 sas_hp <- fread("/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/hp/ukb_sas_hp_formatted_rescaled.txt")
 
 ## Select drug target gene region 
-hmgcr_ldlc_afr <- afr_ldlc %>% filter(chr == 5, pos >= 74632154, pos <= 74659826)
-hmgcr_ldlc_amr <- amr_ldlc %>% filter(CHR == 5, POS >= 74632154, POS <= 74659826)
+hmgcr_ldlc_afr <- afr_ldlc %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+hmgcr_ldlc_amr <- amr_ldlc %>% filter(chr == 5, pos >= 74632154 - 250000, pos <= 74632154 + 250000)
+
 hmgcr_ldlc_eas <- eas_ldlc %>% filter(CHR == 5, BP >= 74632154, BP <= 74659826)
 hmgcr_ldlc_eur <- eur_ldlc %>% filter(CHR == 5, BP >= 74632154, BP <= 74659826)
 hmgcr_ldlc_sas <- sas_ldlc %>% filter(chr == 5, pos >= 74632154, pos <= 74659826)
