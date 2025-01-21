@@ -363,49 +363,6 @@ ugrx2comp <- (hmgcr_hdl_ugr_common$Est %*% pcs_ugr$vectors[,1:K_ugr] %>% drop()
 ugrx3comp <- (hmgcr_tg_ugr_common$Est %*% pcs_ugr$vectors[,1:K_ugr] %>% drop()
 ugrycomp <- (afr_chd_common$Est_rescaled %*% pcs_ugr$vectors[,1:K_ugr] %>% drop()
 
-## Subset LD matrix by number of rows to allow for the same dimensions 
-afrldpc_subset_loading <- afrldpc$loadings[1:n_rows_afr, 1:i_afr]
-amrldpc_subset_loading <- amrldpc$loadings[1:n_rows_amr, 1:i_amr]
-easldpc_subset_loading <- easldpc$loadings[1:n_rows_eas, 1:i_eas]
-eurldpc_subset_loading <- eurldpc$loadings[1:n_rows_eur, 1:i_eur]
-sasldpc_subset_loading <- sasldpc$loadings[1:n_rows_sas, 1:i_sas]
-
-afrld_subset <- afrld$ld[1:n_rows_afr, 1:i_afr]
-amrld_subset <- amrld$ld[1:n_rows_amr, 1:i_amr]
-easld_subset <- easld$ld[1:n_rows_eas, 1:i_eas]
-eurld_subset <- eurld$ld[1:n_rows_eur, 1:i_eur]
-sasld_subset <- sasld$ld[1:n_rows_sas, 1:i_sas]
-
-afrx1comp <- (hmgcr_ldlc_afr_common$Est) %*% afrldpc_subset_loading[,1:i_afr] %>% as.numeric()
-afrx2comp <- (hmgcr_hdl_afr_common$Est) %*% afrldpc_subset_loading[,1:i_afr] %>% as.numeric()
-afrx3comp <- (hmgcr_tg_afr_common$Est) %*% afrldpc_subset_loading[,1:i_afr] %>% as.numeric()
-afrycomp <- (afr_chd_common$Est_rescaled) %*% afrldpc_subset_loading[,1:i_afr] %>% as.numeric()
-
-amrx1comp <- (hmgcr_ldlc_amr_common$BETA) %*% amrldpc_subset_loading[,1:i_amr] %>% as.numeric()
-amrx2comp <- (hmgcr_hdl_amr_common$BETA) %*% amrldpc_subset_loading[,1:i_amr] %>% as.numeric()
-amrx3comp <- (hmgcr_tg_amr_common$BETA) %*% amrldpc_subset_loading[,1:i_amr] %>% as.numeric()
-amrycomp <- (amr_chd_common$BETA_rescaled) %*% amrldpc_subset_loading[,1:i_amr] %>% as.numeric()
-
-easx1comp <- (hmgcr_ldlc_eas_common$BETA) %*% easldpc_subset_loading[,1:i_eas] %>% as.numeric()
-easx2comp <- (hmgcr_hdl_eas_common$BETA) %*% easldpc_subset_loading[,1:i_eas] %>% as.numeric()
-easx3comp <- (hmgcr_tg_eas_common$BETA) %*% easldpc_subset_loading[,1:i_eas] %>% as.numeric()
-easycomp <- (eas_chd_common$BETA_rescaled) %*% easldpc_subset_loading[,1:i_eas] %>% as.numeric()
-
-eurx1comp <- (hmgcr_ldlc_eur_common$BETA) %*% eurldpc_subset_loading[,1:i_eur] %>% as.numeric()
-eurx2comp <- (hmgcr_hdl_eur_common$BETA) %*% eurldpc_subset_loading[,1:i_eur] %>% as.numeric()
-eurx3comp <- (hmgcr_tg_eur_common$BETA) %*% eurldpc_subset_loading[,1:i_eur] %>% as.numeric()
-eurycomp <- (eur_chd_common$logOR) %*% eurldpc_subset_loading[,1:i_eur] %>% as.numeric()
-
-sasx1comp <- (hmgcr_ldlc_sas_common$Est) %*% sasldpc_subset_loading[,1:i_sas] %>% as.numeric()
-sasx2comp <- (hmgcr_hdl_sas_common$Est) %*% sasldpc_subset_loading[,1:i_sas] %>% as.numeric()
-sasx3comp <- (hmgcr_tg_sas_common$Est) %*% sasldpc_subset_loading[,1:i_sas] %>% as.numeric()
-sasycomp <- (sas_chd_common$Est_rescaled) %*% sasldpc_subset_loading[,1:i_sas] %>% as.numeric()
-
-ugrx1comp <- (hmgcr_ldlc_ugr_common$Est) %*% afrldpc_subset_loading[,1:i_afr] %>% as.numeric()
-ugrx2comp <- (hmgcr_hdl_ugr_common$Est) %*% afrldpc_subset_loading[,1:i_afr] %>% as.numeric()
-ugrx3comp <- (hmgcr_tg_ugr_common$Est) %*% afrldpc_subset_loading[,1:i_afr] %>% as.numeric()
-ugrycomp <- (afr_chd_common$Est_rescaled) %*% afrldpc_subset_loading[,1:i_afr] %>% as.numeric()
-
 ## Multivariable MR (unweighted)
 afr_mvmr_unw <- summary(lm(afrycomp ~ 0 + afrx1comp + afrx2comp + afrx3comp))
 amr_mvmr_unw <- summary(lm(amrycomp ~ 0 + amrx1comp + amrx2comp + amrx3comp))
@@ -460,26 +417,6 @@ prcomp(Psi_sas, scale=FALSE)$rotation[,1:K_sas]
 Omega_ugr <- (afr_chd_common$Est.SE_rescaled %o% afr_chd_common$Est.SE_rescaled) * afrld_subset
 pcOmega_ugr <- t(prcomp(Psi_ugr, scale=FALSE)$rotation[,1:K_ugr])%*%Omega_ugr%*%
 prcomp(Psi_ugr, scale=FALSE)$rotation[,1:K_ugr]
-
-### OR
-
-Omega_afr <- (afr_hp_common$Est.SE_rescaled %o% afr_hp_common$Est.SE_rescaled) * afrld_subset[, 1:n_rows_afr]
-pcOmega_afr <- t(afrld_subset[,1:i_afr]) %*% Omega_afr %*% afrld_subset[,1:i_afr]
-
-Omega_amr <- (amr_hp_common$SE_rescaled %o% amr_hp_common$SE_rescaled) * amrld_subset[, 1:n_rows_amr]
-pcOmega_amr <- t(amrld_subset[,1:i_amr]) %*% Omega_amr %*% amrld_subset[,1:i_amr]
-
-Omega_eas <- (eas_hp_common$SE_rescaled %o% eas_hp_common$SE_rescaled) * easld_subset[, 1:n_rows_eas]
-pcOmega_eas <- t(easld_subset[,1:i_eas]) %*% Omega_eas %*% easld_subset[,1:i_eas]
-
-Omega_eur <- (eur_hp_common$logOR.SE %o% eur_hp_common$logOR.SE) * eurld_subset[, 1:n_rows_eur]
-pcOmega_eur <- t(eurld_subset[,1:i_eur]) %*% Omega_eur %*% eurld_subset[,1:i_eur]
-
-Omega_sas <- (sas_hp_common$Est.SE_rescaled %o% sas_hp_common$Est.SE_rescaled) * sasld_subset[, 1:n_rows_sas]
-pcOmega_sas <- t(sasld_subset[,1:i_sas]) %*% Omega_sas %*% sasld_subset[,1:i_sas]
-
-Omega_ugr <- (afr_hp_common$Est.SE_rescaled %o% afr_hp_common$Est.SE_rescaled) * afrld_subset[, 1:n_rows_afr]
-pcOmega_ugr <- t(afrld_subset[,1:i_afr]) %*% Omega_afr %*% afrld_subset[,1:i_afr]
 
 # Multivariable MR (weighted)
 #afr_mvmr_weighted <- summary(lm(afrycomp ~ 0 + afrx1comp + afrx2comp + afrx3comp, weight = 1/diag(pcOmega_afr)^2))
@@ -541,7 +478,7 @@ colnames(mvpca_pval_afr) <- "pval"
 
 res_afr <- cbind(mvpca_est_afr, mvpca_se_afr, mvpca_pval_afr)
 
-write.table(res_afr, "/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/mvmr/mv_mr_pca_afr.txt", sep = "\t", quote = F, row.names = F)
+write.table(res_afr, "/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/mvmr/hmgcr_chd_mvmr_pca_afr.txt", sep = "\t", quote = F, row.names = F)
 
 mvpca_amr <- mr_mvivw(mr_mvinput(cbind(amrx1comp, amrx2comp, amrx3comp),
 cbind(rep(1, length(amrx1comp)), rep(1, length(amrx1comp)), rep(1, length(amrx1comp))),
@@ -572,7 +509,7 @@ colnames(mvpca_pval_amr) <- "pval"
 
 res_amr <- cbind(mvpca_est_amr, mvpca_se_amr, mvpca_pval_amr)
 
-write.table(res_amr, "/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/mvmr/mv_mr_pca_amr.txt", sep = "\t", quote = F, row.names = F)
+write.table(res_amr, "/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/mvmr/hmgcr_chd_mvmr_pca_amr.txt", sep = "\t", quote = F, row.names = F)
 
 mvpca_eas <- mr_mvivw(mr_mvinput(cbind(easx1comp, easx2comp, easx3comp),
 cbind(rep(1, length(easx1comp)), rep(1, length(easx1comp)), rep(1, length(easx1comp))),
@@ -603,7 +540,7 @@ colnames(mvpca_pval_eas) <- "pval"
 
 res_eas <- cbind(mvpca_est_eas, mvpca_se_eas, mvpca_pval_eas)
 
-write.table(res_eas, "/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/mvmr/mv_mr_pca_eas.txt", sep = "\t", quote = F, row.names = F)
+write.table(res_eas, "/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/mvmr/hmgcr_chd_mvmr_pca_eas.txt", sep = "\t", quote = F, row.names = F)
 
 mvpca_eur <- mr_mvivw(mr_mvinput(cbind(eurx1comp, eurx2comp, eurx3comp),
 cbind(rep(1, length(eurx1comp)), rep(1, length(eurx1comp)), rep(1, length(eurx1comp))),
@@ -634,7 +571,7 @@ colnames(mvpca_pval_eur) <- "pval"
 
 res_eur <- cbind(mvpca_est_eur, mvpca_se_eur, mvpca_pval_eur)
 
-write.table(res_eur, "/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/mvmr/mv_mr_pca_eur.txt", sep = "\t", quote = F, row.names = F)
+write.table(res_eur, "/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/mvmr/hmgcr_chd_mvmr_pca_eur.txt", sep = "\t", quote = F, row.names = F)
 
 mvpca_sas <- mr_mvivw(mr_mvinput(cbind(sasx1comp, sasx2comp, sasx3comp),
 cbind(rep(1, length(sasx1comp)), rep(1, length(sasx1comp)), rep(1, length(sasx1comp))),
@@ -665,7 +602,7 @@ colnames(mvpca_pval_sas) <- "pval"
 
 res_sas <- cbind(mvpca_est_sas, mvpca_se_sas, mvpca_pval_sas)
 
-write.table(res_sas, "/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/mvmr/mv_mr_pca_sas.txt", sep = "\t", quote = F, row.names = F)
+write.table(res_sas, "/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/mvmr/hmgcr_chd_mvmr_pca_sas.txt", sep = "\t", quote = F, row.names = F)
 
 mvpca_ugr <- mr_mvivw(mr_mvinput(cbind(ugrx1comp, ugrx2comp, ugrx3comp),
 cbind(rep(1, length(ugrx1comp)), rep(1, length(ugrx1comp)), rep(1, length(ugrx1comp))),
@@ -696,7 +633,7 @@ colnames(mvpca_pval_ugr) <- "pval"
 
 res_ugr <- cbind(mvpca_est_ugr, mvpca_se_ugr, mvpca_pval_ugr)
 
-write.table(res_ugr, "/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/mvmr/mv_mr_pca_ugr.txt", sep = "\t", quote = F, row.names = F)
+write.table(res_ugr, "/user/work/ac14629/MRC_network_project/results/MAIN_ANALYSIS/mvmr/hmgcr_chd_mvmr_pca_ugr.txt", sep = "\t", quote = F, row.names = F)
 
 ## Compare using wald ratio for a single snp in univariable MR
 #library(TwoSampleMR)
