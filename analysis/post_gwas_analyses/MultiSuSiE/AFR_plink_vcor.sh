@@ -32,7 +32,7 @@ RANGE=$(mktemp)
 
 echo "${CHR}:${START}-${END}" > "$RANGE"
 
-# Run PLINK2 LD correlation (your "vcor")
+# Run PLINK2 LD correlation 
 plink2 \
   --bfile AFR_modified \
   --extract range "$RANGE" \
