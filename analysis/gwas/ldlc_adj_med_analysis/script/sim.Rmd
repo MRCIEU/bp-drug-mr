@@ -84,16 +84,18 @@ est_effs <- function(dat) {
     summary(lm(LDLo ~ Gd, dat))$coef[2,],
     summary(lm(LDLo ~ Gd, datnonmed))$coef[2,],
     summary(lm(LDLo ~ Gd, datmed))$coef[2,],
+    summary(lm(LDLo ~ Gd + med, dat))$coef[2,],
     summary(lm(LDLa ~ Gd, dat))$coef[2,]
-  ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_med", "y_adj_approx"), n=c(nrow(dat), nrow(dat), nrow(datnonmed), nrow(datmed), nrow(dat)), g="direct")
+  ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_med", "y_cov", "y_adj_approx"), n=c(nrow(dat), nrow(dat), nrow(datnonmed), nrow(datmed), nrow(dat), nrow(dat)), g="direct")
 
   results_2 <- rbind(
     summary(lm(LDL ~ Gi, dat))$coef[2,],
     summary(lm(LDLo ~ Gi, dat))$coef[2,],
     summary(lm(LDLo ~ Gi, datnonmed))$coef[2,],
     summary(lm(LDLo ~ Gi, datmed))$coef[2,],
+    summary(lm(LDLo ~ Gi + med, dat))$coef[2,],
     summary(lm(LDLa ~ Gi, dat))$coef[2,]
-  ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_med", "y_adj_approx"), n=c(nrow(dat), nrow(dat), nrow(datnonmed), nrow(datmed), nrow(dat)), g="indirect")
+  ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_med", "y_cov", "y_adj_approx"), n=c(nrow(dat), nrow(dat), nrow(datnonmed), nrow(datmed), nrow(dat), nrow(dat)), g="indirect")
   return(bind_rows(results_1, results_2))
 }
 
@@ -194,6 +196,9 @@ all_results <- lapply(1:nrow(param), function(i) {
 
 ```
 
+
+
+
 Organise results
 ```{r}
 for (i in seq_along(all_results)) {
@@ -213,7 +218,7 @@ summary_results <- all_results_df %>%
             )
 
 # Order of measures for the forest plot
-measure_order <- c("y", "y_obs", "y_nomed","y_adj_approx")
+measure_order <- c("y", "y_obs", "y_nonmed", "y_cov", "y_adj_approx")
 
 # Create a forest plot
 ggplot(summary_results, aes(x = mean_estimate, y = measure)) +
