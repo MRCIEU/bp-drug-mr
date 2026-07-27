@@ -27,7 +27,7 @@ med_prob <- function(score, medication_prevalence) {
 #' 
 #' @param nid Sample size
 #' @param af_d Allele frequency of direct effect
-#' @param af_i Alle
+#' @param af_i Allele
 #' @param mprev Medication prevalence 
 #' @param ldl_b LDLc beta effect estimate
 #' @param mean_ldl Mean LDLc value
@@ -53,7 +53,7 @@ dgm <- function(nid, af_d, af_i, mprev, ldl_b, mean_ldl, sd_ldl, b_d, b_i, med_b
   return(dat)
 }
 
-example_dat <- dgm(nid=100000, af_d=0.3, af_i=0.4, mprev=0.90, ldl_b=0.5, mean_ldl=3.55, sd_ldl=0.87, b_d=0.3, b_i=1, med_b=0.8, adj=0.8)
+example_dat <- dgm(nid=100000, af_d=0.3, af_i=0.4, mprev=0.14, ldl_b=0.5, mean_ldl=3.55, sd_ldl=0.87, b_d=0.3, b_i=1, med_b=0.8, adj=0.8)
 str(example_dat)
 ```
 
@@ -86,7 +86,7 @@ est_effs <- function(dat) {
     summary(lm(LDLo ~ Gd, datmed))$coef[2,],
     summary(lm(LDLo ~ Gd + med, dat))$coef[2,],
     summary(lm(LDLa ~ Gd, dat))$coef[2,]
-  ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_med", "y_cov", "y_adj_approx"), n=c(nrow(dat), nrow(dat), nrow(datnonmed), nrow(datmed), nrow(dat), nrow(dat)), g="direct")
+  ) %>% as_tibble() %>% mutate(measure=c("True", "Uncontrolled", "Medication-excluded", "Medication only", "Medication-covariate", "Approximate adjustment for medication"), n=c(nrow(dat), nrow(dat), nrow(datnonmed), nrow(datmed), nrow(dat), nrow(dat)), g="Direct")
 
   results_2 <- rbind(
     summary(lm(LDL ~ Gi, dat))$coef[2,],
@@ -95,19 +95,63 @@ est_effs <- function(dat) {
     summary(lm(LDLo ~ Gi, datmed))$coef[2,],
     summary(lm(LDLo ~ Gi + med, dat))$coef[2,],
     summary(lm(LDLa ~ Gi, dat))$coef[2,]
-  ) %>% as_tibble() %>% mutate(measure=c("y", "y_obs", "y_nonmed", "y_med", "y_cov", "y_adj_approx"), n=c(nrow(dat), nrow(dat), nrow(datnonmed), nrow(datmed), nrow(dat), nrow(dat)), g="indirect")
+  ) %>% as_tibble() %>% mutate(measure=c("True", "Uncontrolled", "Medication-excluded", "Medication only", "Medication-covariate", "Approximate adjustment for medication"), n=c(nrow(dat), nrow(dat), nrow(datnonmed), nrow(datmed), nrow(dat), nrow(dat)), g="Indirect")
   return(bind_rows(results_1, results_2))
 }
 
 plot_ests <- function(ests) {
-  truth <- subset(ests, measure == "y")
 
-  ggplot(ests, aes(x=`Estimate`, y=measure)) +
-  geom_rect(data=truth, fill="grey", aes(xmin=`Estimate` - 1.96 * `Std. Error`, xmax=`Estimate` + 1.96 * `Std. Error`, ymin=-Inf, ymax=Inf)) +
-  geom_point(aes(colour=`Pr(>|t|)` < 0.01)) +
-  geom_errorbarh(aes(colour=`Pr(>|t|)` < 0.01, xmin=`Estimate` - 1.96 * `Std. Error`, xmax=`Estimate` + 1.96 * `Std. Error`), height=0) +
-  geom_vline(xintercept=0, linetype="dotted") +
-  facet_grid(g ~ .)
+  # Set the desired order of the measures
+  ests$measure <- factor(
+    ests$measure,
+    levels = c(
+      "True",
+      "Uncontrolled",
+      "Medication only",
+      "Medication-excluded",
+      "Medication-covariate",
+      "Approximate adjustment for medication"
+    )
+  )
+
+  truth <- subset(ests, measure == "True")
+
+  ggplot(ests, aes(x = Estimate, y = measure)) +
+    geom_rect(
+      data = truth,
+      aes(
+        xmin = Estimate - 1.96 * `Std. Error`,
+        xmax = Estimate + 1.96 * `Std. Error`,
+        ymin = -Inf,
+        ymax = Inf
+      ),
+      fill = "grey"
+    ) +
+    geom_jitter(
+      aes(colour = `Pr(>|t|)` < 0.01),
+      width = 0.01,
+      height = 0
+    ) +
+    geom_errorbarh(
+      aes(
+        colour = `Pr(>|t|)` < 0.01,
+        xmin = Estimate - 1.96 * `Std. Error`,
+        xmax = Estimate + 1.96 * `Std. Error`
+      ),
+      height = 0
+    ) +
+    geom_vline(xintercept = 0, linetype = "dotted") +
+    facet_grid(g ~ .) +
+    theme(
+      panel.border = element_rect(color = "grey", fill = NA, linewidth = 0.5),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      panel.background = element_rect(fill = "white"),
+      panel.grid.major.y = element_line(color = "grey"),
+      panel.grid.minor.y = element_blank(),
+      axis.title.y = element_blank(),
+      legend.position = "none"
+    )
 }
 ```
 
@@ -118,7 +162,7 @@ example_dat <- dgm(
   nid=100000, 
   af_d=0.3, 
   af_i=0.4, 
-  mprev=0.13, 
+  mprev=0.14, 
   ldl_b=0.5, 
   mean_ldl=3.55, 
   sd_ldl=0.87, 
@@ -146,15 +190,15 @@ param <- expand.grid(
   af_d=c(0.30), 
   af_i=c(0.40), 
   mprev=0.14, 
-  ldl_b=c(0.5),
-  b_d=c(0.30), 
-  b_i=c(1), 
+  ldl_b=c(0.50),
+  b_d=c(0.40), 
+  b_i=c(0.8), 
   med_b=0.8, 
   adj=0.8
 )
 
 # Adding random noise to parameter values
-noise_factor <- 0.08  # Adjust this value for increased noise intensity
+noise_factor <- 0.05 # Adjust this value for increased noise intensity
 param$af_d <- jitter(param$af_d, factor = noise_factor)
 param$af_i <- jitter(param$af_i, factor = noise_factor)
 param$ldl_b <- jitter(param$ldl_b, factor = noise_factor)
@@ -162,11 +206,11 @@ param$b_d <- jitter(param$b_d, factor = noise_factor)
 param$b_i <- jitter(param$b_i, factor = noise_factor)
 
 # Make sure parameter values are within defined ranges
-param$af_d <- pmax(pmin(param$af_d, 0.30),0.1)
-param$af_i <- pmax(pmin(param$af_i, 0.40),0.1)
+param$af_d <- pmax(pmin(param$af_d, 0.30))
+param$af_i <- pmax(pmin(param$af_i, 0.40))
 param$ldl_b <- pmax(pmin(param$ldl_b, 0.50))
-param$b_d <- pmax(pmin(param$b_d, 0.30))
-param$b_i <- pmax(pmin(param$b_i, 1.00), 0.80)
+param$b_d <- pmax(pmin(param$b_d, 0.40))
+param$b_i <- pmax(pmin(param$b_i, 0.80))
 
 # Display the modified parameter grid
 print(param)
@@ -183,7 +227,7 @@ all_results <- lapply(1:nrow(param), function(i) {
     sd_ldl = 0.870798,
     af_d=param$af_d[i], 
     af_i=param$af_i[i], 
-    mprev=0.5, 
+    mprev=0.14, 
     ldl_b=param$ldl_b[i],
     b_d=param$b_d[i], 
     b_i=param$b_i[i], 
@@ -196,15 +240,14 @@ all_results <- lapply(1:nrow(param), function(i) {
 
 ```
 
-
-
-
 Organise results
 ```{r}
 for (i in seq_along(all_results)) {
   attr(all_results[[i]], "Estimate") <- param$Estimate[i]
   attr(all_results[[i]], "Std. Error") <- param$Std.Error[i]
   attr(all_results[[i]], "measure") <- param$measure[i]
+  attr(all_results[[i]], "Pr(>|t|") <- param$'Pr(>|t|'[i]
+  attr(all_results[[i]], "n") <- param$'n'[i]
 }
 
 # Convert the list of results to a single data frame
@@ -213,32 +256,52 @@ all_results_df <- bind_rows(all_results)
 # Calculate the mean estimated coefficient and standard error for each measure
 summary_results <- all_results_df %>%
   group_by(measure,g) %>%
-  summarise(mean_estimate = mean(Estimate),
+ summarise(mean_estimate = mean(Estimate),
             mean_se = sum(`Std. Error`) / 1000
             )
 
 # Order of measures for the forest plot
-measure_order <- c("y", "y_obs", "y_nonmed", "y_cov", "y_adj_approx")
+all_results_df$measure <- factor(
+  all_results_df$measure,
+  levels = c("True", "Uncontrolled", "Medication only", "Medication-excluded", "Medication-covariate", "Approximate adjustment for medication")
+)
 
 # Create a forest plot
-ggplot(summary_results, aes(x = mean_estimate, y = measure)) +
-  geom_point(size = 3, aes(color = g)) +
-  geom_errorbarh(aes(xmin = mean_estimate - 1.96 * mean_se, xmax = mean_estimate + 1.96 * mean_se), height = 0.2) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "gray", size = 1) +
-  labs(title = "Forest plot of the effects of LDL cholesterol on direct and indirect LDL cholesterol genetic factors",
-       subtitle = paste("Based on", 1,000, "simulations"),
-       x = "Estimated Coefficient",
-       y = "Measure") +
-  scale_y_discrete(limits = rev(measure_order)) +
-  xlim(-1,1.5) +
-  theme_minimal() +
-  theme(panel.grid.major.y = element_blank(),
-        panel.grid.minor.y = element_blank())
-
+all_results_df %>% plot_ests
+p <- all_results_df %>% plot_ests
 ```
-# Summary
-- By adjusting for medication usage in observed LDL values, the simulation shows an attenuation in genetic effect estimates. 
-- Collider bias induced a negative association between unadjusted LDLc values and non-LDLc genetic factors, and a positive association between adjusted LDLc and non-LDLc genetic factors. 
+
+```{r}
+png("sim_res.png", width = 10, height = 6, units = "in", res = 300)
+print(p)
+dev.off()
+```
+Calculate percentage difference in mean F-statistic for each method compared to the mean F-statistic for the 'True' model
+```{r}
+all_results_df$f_stat <- (all_results_df$`t value`)^2
+all_results_df
+
+mean_f_stats <- all_results_df %>%
+  group_by(measure) %>%
+  summarize(mean_f_stat = mean(f_stat, na.rm = TRUE))
+
+print(mean_f_stats)
+
+F_true <- mean_f_stats %>%
+  filter(measure == "True") %>%
+  pull(mean_f_stat)
+
+percentage_difference <- mean_f_stats %>%
+  mutate(percentage_diff = ((mean_f_stat - F_true) / F_true) * 100)
+
+# Exclude the 'True' model from the percentage difference results
+percentage_difference <- percentage_difference %>%
+  filter(measure != "True")
+
+# View the results
+print(percentage_difference)
+```
+
 
 ```{r}
 sessionInfo()
