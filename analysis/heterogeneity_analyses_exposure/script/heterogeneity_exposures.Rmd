@@ -51,9 +51,7 @@ drug_replication_discovery_p <- 0.05
 
 # Analysis overview
 
-The report analyses each matching exposure file in `../data/`. For every trait it includes the overall Cochran's Q heterogeneity test, per-population Q contributions, multiple-testing correction, population-specific effect plots, QQ plots and genomic inflation estimates. If a `Drug` annotation is present, the same heterogeneity analyses are repeated for drug-target SNPs and summarized by drug class. EUR-referenced expected-versus-observed replication analyses are also run for all variants and for drug-target variants when p-values are available.
-
-The overall and drug-target heterogeneity tests each use their own Bonferroni threshold, `0.05 / number of testable SNPs`. FDR-adjusted p-values are reported alongside these thresholds. Replication compares the direction and significance of estimates in each other population against EUR, joining by `snpid` so that estimates cannot become misaligned. A population with no corresponding variant is not included in that variant's replication comparison.
+The report analyses each matching exposure file in `../data/`. For every trait it includes the overall Cochran's Q heterogeneity test, per-population Q contributions, multiple-testing correction, and EUR-referenced expected-versus-observed replication analyses. Overall and drug-target heterogeneity tests use separate Bonferroni thresholds based on the number of testable SNPs, with FDR-adjusted p-values reported alongside.
 
 ```{r selected-inputs}
 knitr::kable(data.frame(trait = names(files), input = basename(files)),
@@ -327,9 +325,12 @@ for (trait in names(files)) {
       comparison <- replication_by_population(reference, filter(dat, pop == target_pop),
                                                replication_discovery_p, alpha)
       if (is.null(comparison)) next
+      # Save the list values before mutate creates a column with the same name.
+      n_discovery <- comparison$n_discovery
+      n_paired <- comparison$n_paired
       replication_rows[[target_pop]] <- comparison$res %>%
         mutate(comparison = paste("EUR vs", target_pop),
-               n_discovery = comparison$n_discovery, n_paired = comparison$n_paired, .before = 1)
+               n_discovery = n_discovery, n_paired = n_paired, .before = 1)
       if (nrow(comparison$variants)) {
         replication_failures[[target_pop]] <- comparison$variants %>%
           mutate(comparison = paste("EUR vs", target_pop), .before = 1)
@@ -418,9 +419,12 @@ for (trait in names(files)) {
           comparison <- replication_by_population(drug_reference, filter(dat_drug, pop == target_pop),
                                                    drug_replication_discovery_p, alpha)
           if (is.null(comparison)) next
+          # Save the list values before mutate creates a column with the same name.
+          n_discovery <- comparison$n_discovery
+          n_paired <- comparison$n_paired
           drug_replication_rows[[target_pop]] <- comparison$res %>%
             mutate(comparison = paste("EUR vs", target_pop),
-                   n_discovery = comparison$n_discovery, n_paired = comparison$n_paired, .before = 1)
+                   n_discovery = n_discovery, n_paired = n_paired, .before = 1)
         }
         if (length(drug_replication_rows)) {
           print(knitr::kable(bind_rows(drug_replication_rows), digits = 5,
@@ -444,9 +448,7 @@ for (trait in names(files)) {
 
 # Interpretation and reproducibility
 
-For each exposure, Cochran's Q is calculated from the population-specific estimates using inverse-variance fixed-effect weights. The per-population Q contribution p-values describe how much each population's estimate contributes to the overall heterogeneity statistic; they are descriptive follow-up tests, while the SNP-level Q p-value is the primary heterogeneity test. Bonferroni correction and FDR are calculated separately for the full exposure and its drug-target subset.
-
-Replication uses EUR as the discovery/reference population and tests concordance of effect direction and replication p-value against the expected rates under the discovery effects and replication standard errors. All cross-population comparisons are matched by SNP identifier. The all-exposure discovery threshold is `r format(replication_discovery_p, scientific = TRUE)`; the drug-target discovery threshold is `r drug_replication_discovery_p`. These thresholds can be changed in the setup chunk if a different replication definition is intended.
+For each exposure, Cochran's Q is calculated from the population-specific estimates using inverse-variance fixed-effect weights. Per-population Q contribution p-values describe each population's contribution to the overall heterogeneity statistic. Replication uses EUR as the discovery/reference population and compares observed replication with expected rates under the discovery effects and replication sampling variation.
 
 ```{r session-info}
 cat("Selected traits:", paste(names(files), collapse = ", "), "\n")
