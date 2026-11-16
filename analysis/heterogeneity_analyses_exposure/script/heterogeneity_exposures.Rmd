@@ -25,12 +25,12 @@ suppressPackageStartupMessages({
   library(ggplot2)
 })
 
-# Data files are discovered automatically. To analyse only selected traits,
-# set params$traits in the YAML header, e.g. ["sbp", "dbp"].
+# Discover one input per exposure. To restrict the report, set params$traits
+# in the YAML header, e.g. ["sbp", "dbp"].
 data_dir <- file.path("..", "data")
 pattern <- "_pop_extract_common_snps_clumped_corrected\\.rds$"
 all_files <- list.files(data_dir, pattern = pattern, full.names = TRUE)
-if (!length(all_files)) stop("No matching *_pop_extract_common_snps_clumped_corrected.rds files found in ", data_dir)
+if (!length(all_files)) stop("No matching exposure RDS files found in ", data_dir)
 trait_names <- sub(pattern, "", basename(all_files))
 files <- stats::setNames(all_files, trait_names)
 if (!is.null(params$traits)) {
@@ -41,21 +41,21 @@ if (!is.null(params$traits)) {
   files <- files[requested]
 }
 populations <- c("AFR", "AMR", "EAS", "EUR", "SAS", "UGR")
-nominal_threshold <- 0.05
+alpha <- 0.05
 ```
 
 # Analysis overview
 
-The report discovers exposure datasets in `analysis/heterogeneity_analyses_exposure/data` whose filenames match `*_pop_extract_common_snps_clumped_corrected.rds`. By default, every matching exposure is analysed. To select a subset, edit `params$traits` in the YAML header using the names before that suffix (for example, `sbp` and `dbp`). The analysis uses fixed-effect meta-analysis and Cochran's Q across the available populations. Per-population Q contribution p-values are descriptive diagnostics and are not separate adjusted heterogeneity tests.
+The report analyses each matching exposure file in `../data/`. The significance threshold for multiple testing is calculated separately for each trait as `0.05 / number of testable SNPs`, where testable SNPs have valid estimates in at least two populations. The drug-target subset, when available, has its own denominator and threshold. The report plots population-specific estimates and 95% confidence intervals only for SNPs passing the corresponding Bonferroni threshold; therefore the SNPs shown can differ between traits. No SNP count or threshold is hard-coded.
 
 ```{r selected-inputs}
 knitr::kable(data.frame(trait = names(files), input = basename(files)),
             caption = "Exposure datasets selected for analysis")
 ```
 
-# Functions
+# Analysis functions
 
-The same analysis function names are retained: `fixed_effects_meta_analysis()`, `heterogeneity_test()`, `combine_data()`, `expected_vs_observed_replication()`, and `forest_plot()`. The functions validate inputs, omit unusable estimates, and explicitly preserve population-to-estimate mapping when some populations are missing for a variant.
+The original function names are retained. The analysis handles missing estimates and keeps each population's estimates correctly aligned when calculating per-population Q contributions.
 
 ```{r functions}
 fixed_effects_meta_analysis <- function(beta_vec, se_vec) {
@@ -64,8 +64,8 @@ fixed_effects_meta_analysis <- function(beta_vec, se_vec) {
   beta_vec <- beta_vec[keep]
   se_vec <- se_vec[keep]
   n <- length(beta_vec)
-  if (n == 0L) return(list(beta = NA_real_, se = NA_real_, Q = NA_real_,
-                            Qdf = 0L, Qpval = NA_real_, Qj = numeric(), Qjpval = numeric()))
+  if (!n) return(list(beta = NA_real_, se = NA_real_, Q = NA_real_, Qdf = 0L,
+                      Qpval = NA_real_, Qj = numeric(), Qjpval = numeric()))
   w <- 1 / se_vec^2
   beta <- sum(beta_vec * w) / sum(w)
   se <- sqrt(1 / sum(w))
@@ -172,11 +172,27 @@ forest_plot <- function(sslist, snp) {
     geom_vline(xintercept = 0, linetype = "dotted") +
     labs(x = "Effect estimate (95% CI)", y = "Population") + theme_bw()
 }
+
+# Draw population-specific estimates only for selected heterogeneous SNPs.
+plot_heterogeneous_snps <- function(dat, hits, plot_title) {
+  if (!nrow(hits)) {
+    cat("No SNPs pass the Bonferroni threshold for this analysis.\n")
+    return(invisible(NULL))
+  }
+  plot_dat <- dat %>% semi_join(hits, by = "snpid") %>%
+    mutate(pop = factor(pop, levels = populations))
+  ggplot(plot_dat, aes(x = beta, y = pop, colour = pop)) +
+    geom_errorbarh(aes(xmin = beta - 1.96 * se, xmax = beta + 1.96 * se), height = 0) +
+    geom_point() + geom_vline(xintercept = 0, linetype = "dotted") +
+    facet_wrap(vars(snpid), scales = "free_y") +
+    labs(title = plot_title, x = "Effect estimate (95% CI)", y = "Population") +
+    theme_bw() + theme(legend.position = "none", strip.text = element_text(size = 8))
+}
 ```
 
 # Results by exposure
 
-```{r analyse-traits, results='asis', fig.height=5}
+```{r analyse-traits, results='asis', fig.height=6}
 for (trait in names(files)) {
   cat("\n## ", toupper(trait), "\n\n", sep = "")
   dat <- readRDS(files[[trait]])
@@ -186,7 +202,6 @@ for (trait in names(files)) {
     cat("Skipped: required columns missing: ", paste(absent, collapse = ", "), "\n\n", sep = "")
     next
   }
-  if (!"pval" %in% names(dat)) dat$pval <- 2 * pnorm(-abs(dat$beta / dat$se))
   dat <- dat %>% filter(pop %in% populations, !is.na(snpid), is.finite(beta),
                         is.finite(se), se > 0) %>% arrange(pop, snpid) %>%
     distinct(pop, snpid, .keep_all = TRUE)
@@ -197,61 +212,81 @@ for (trait in names(files)) {
   }
   sslist <- stats::setNames(lapply(pops, function(p) filter(dat, pop == p)), pops)
   result <- heterogeneity_test(sslist)
+  n_tests <- sum(!is.na(result$Q$Qpval))
+  mt_thres <- if (n_tests > 0L) alpha / n_tests else NA_real_
   result$Q <- result$Q %>% mutate(fdr = p.adjust(Qpval, method = "BH")) %>% arrange(Qpval)
+  hits <- result$Q %>% filter(!is.na(Qpval), Qpval <= mt_thres)
+
   counts <- tibble::tibble(population = pops,
     variants = vapply(pops, function(p) sum(dat$pop == p), integer(1)))
-  summary <- tibble::tibble(variants_tested = sum(!is.na(result$Q$Qpval)),
-    nominal_Q_p_lt_0_05 = sum(result$Q$Qpval < 0.05, na.rm = TRUE),
-    FDR_lt_0_05 = sum(result$Q$fdr < 0.05, na.rm = TRUE),
-    smallest_Q_p = if (all(is.na(result$Q$Qpval))) NA_real_ else min(result$Q$Qpval, na.rm = TRUE),
-    smallest_FDR = if (all(is.na(result$Q$fdr))) NA_real_ else min(result$Q$fdr, na.rm = TRUE))
+  summary <- tibble::tibble(
+    variants_tested = n_tests,
+    bonferroni_threshold = mt_thres,
+    nominal_Q_p_lt_0_05 = sum(result$Q$Qpval < alpha, na.rm = TRUE),
+    bonferroni_significant = nrow(hits),
+    FDR_lt_0_05 = sum(result$Q$fdr < alpha, na.rm = TRUE),
+    smallest_Q_p = if (!n_tests) NA_real_ else min(result$Q$Qpval, na.rm = TRUE),
+    smallest_FDR = if (all(is.na(result$Q$fdr))) NA_real_ else min(result$Q$fdr, na.rm = TRUE)
+  )
   cat("**Variant counts by population**\n\n")
   print(knitr::kable(counts))
   cat("\n\n**Overall heterogeneity summary**\n\n")
-  print(knitr::kable(summary, digits = 4))
-  cat("\n\n**Top variants ranked by Cochran's Q p-value**\n\n")
-  print(knitr::kable(result$Q %>% filter(!is.na(Qpval)) %>%
-    select(snpid, n_pop, beta_fixed, se_fixed, Q, Qdf, Qpval, fdr) %>% head(25), digits = 4))
+  print(knitr::kable(summary, digits = 5))
+  cat("\n\n**SNPs passing this trait's Bonferroni threshold**\n\n")
+  print(knitr::kable(hits %>% select(snpid, n_pop, beta_fixed, se_fixed, Q, Qdf, Qpval, fdr), digits = 5))
+
+  cat("\n\n**Population-specific estimates for Bonferroni-significant SNPs**\n\n")
+  print(plot_heterogeneous_snps(dat, hits, paste0(toupper(trait), ": Bonferroni-significant heterogeneity SNPs")))
+
   cat("\n\n**Population-level Q contribution summary**\n\n")
   qj_long <- result$Qj %>% pivot_longer(-snpid, names_to = "population", values_to = "p") %>%
     filter(!is.na(p))
   qj_summary <- qj_long %>% group_by(population) %>%
     summarise(variants_with_estimate = n(),
-      fraction_contribution_p_lt_0_05 = mean(p < 0.05), .groups = "drop") %>%
+      fraction_contribution_p_lt_0_05 = mean(p < alpha), .groups = "drop") %>%
     arrange(desc(fraction_contribution_p_lt_0_05))
   print(knitr::kable(qj_summary, digits = 3))
-  qplot <- result$Q %>% filter(is.finite(Qpval), Qpval > 0) %>%
-    ggplot(aes(x = reorder(snpid, Qpval), y = -log10(Qpval))) +
-    geom_point(alpha = 0.65, size = 1.3, colour = "#2C7FB8") +
-    geom_hline(yintercept = -log10(0.05), linetype = "dashed", colour = "firebrick") +
-    labs(x = "Variant", y = expression(-log[10](P)), title = paste(toupper(trait), "Cochran's Q")) +
-    theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
-  print(qplot)
 
   if ("Drug" %in% names(dat)) {
     dat_drug <- dat %>% filter(!is.na(Drug), as.character(Drug) != "")
-    if (nrow(dat_drug)) {
-      drug_sslist <- stats::setNames(lapply(pops, function(p) filter(dat_drug, pop == p)), pops)
+    drug_pops <- pops[vapply(pops, function(p) any(dat_drug$pop == p), logical(1))]
+    if (nrow(dat_drug) && length(drug_pops) >= 2L) {
+      drug_sslist <- stats::setNames(lapply(drug_pops, function(p) filter(dat_drug, pop == p)), drug_pops)
       drug_result <- heterogeneity_test(drug_sslist)
+      n_drug_tests <- sum(!is.na(drug_result$Q$Qpval))
+      drug_mt_thres <- if (n_drug_tests > 0L) alpha / n_drug_tests else NA_real_
       drug_result$Q <- drug_result$Q %>% mutate(fdr = p.adjust(Qpval, method = "BH"))
+      drug_hits <- drug_result$Q %>% filter(!is.na(Qpval), Qpval <= drug_mt_thres)
       drug_map <- dat_drug %>% distinct(snpid, Drug)
       drug_summary <- drug_result$Q %>% left_join(drug_map, by = "snpid") %>%
         group_by(Drug) %>% summarise(n_snps = n_distinct(snpid),
-          n_FDR_lt_0_05 = n_distinct(snpid[fdr < 0.05]),
-          proportion_FDR_lt_0_05 = mean(fdr < 0.05, na.rm = TRUE),
+          n_bonferroni_significant = n_distinct(snpid[snpid %in% drug_hits$snpid]),
+          proportion_FDR_lt_0_05 = mean(fdr < alpha, na.rm = TRUE),
           median_Q_p = median(Qpval, na.rm = TRUE), .groups = "drop") %>%
-        arrange(desc(proportion_FDR_lt_0_05), median_Q_p)
-      cat("\n\n**Drug-target subset, grouped by annotation**\n\n")
+        arrange(desc(n_bonferroni_significant), median_Q_p)
+      cat("\n\n**Drug-target subset summary**\n\n")
+      cat("Tests: ", n_drug_tests, "; Bonferroni threshold: ", signif(drug_mt_thres, 5),
+          "; significant SNPs: ", nrow(drug_hits), "\n\n", sep = "")
       print(knitr::kable(drug_summary, digits = 4))
-    } else cat("\n\nNo non-missing drug annotations for this exposure.\n")
-  } else cat("\n\nNo `Drug` annotation column; drug-target analysis not applicable.\n")
+      cat("\n\n**Drug-target SNPs passing this subset's Bonferroni threshold**\n\n")
+      print(knitr::kable(drug_hits %>% left_join(drug_map, by = "snpid") %>%
+        select(snpid, Drug, n_pop, beta_fixed, se_fixed, Q, Qdf, Qpval, fdr), digits = 5))
+      cat("\n\n**Population-specific estimates for drug-target Bonferroni hits**\n\n")
+      print(plot_heterogeneous_snps(dat_drug, drug_hits,
+        paste0(toupper(trait), ": drug-target Bonferroni-significant SNPs")))
+    } else {
+      cat("\n\nDrug-target analysis skipped: fewer than two populations have annotated variants.\n")
+    }
+  } else {
+    cat("\n\nNo `Drug` annotation column; drug-target analysis not applicable.\n")
+  }
   cat("\n\n---\n\n")
 }
 ```
 
 # Interpretation and reproducibility
 
-A small Cochran's Q p-value indicates that the available population-specific estimates are more dispersed than expected under a common-effect model. Interpret results alongside effect estimates, standard errors, sample sizes, and the descriptive contribution summaries. The BH FDR adjustment is applied separately within each exposure and, when available, within that exposure's drug-target subset. Variants with fewer than two valid population estimates are not testable. Differences in significance across populations alone do not establish a difference in effect.
+Each exposure gets its own Bonferroni denominator, calculated from the number of SNP-level Q tests with valid estimates in at least two populations. The drug-target subset is corrected separately using its own number of testable SNPs. Effect plots show only variants passing the corresponding threshold; when no variant passes, the report states this explicitly. BH FDR is also provided as a complementary multiple-testing measure within each exposure. Per-population Q contribution p-values are descriptive and should not be treated as independent tests.
 
 ```{r session-info}
 cat("Selected traits:", paste(names(files), collapse = ", "), "\n")
