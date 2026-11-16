@@ -42,11 +42,18 @@ if (!is.null(params$traits)) {
 }
 populations <- c("AFR", "AMR", "EAS", "EUR", "SAS", "UGR")
 alpha <- 0.05
+# EUR is used as the discovery/reference population for replication analyses.
+# The thresholds reproduce the original analyses: genome-wide significance for
+# all SNPs, and nominal significance in the drug-target subset.
+replication_discovery_p <- 5e-8
+drug_replication_discovery_p <- 0.05
 ```
 
 # Analysis overview
 
-The report analyses each matching exposure file in `../data/`. The significance threshold for multiple testing is calculated separately for each trait as `0.05 / number of testable SNPs`, where testable SNPs have valid estimates in at least two populations. The drug-target subset, when available, has its own denominator and threshold. The report plots population-specific estimates and 95% confidence intervals only for SNPs passing the corresponding Bonferroni threshold; therefore the SNPs shown can differ between traits. No SNP count or threshold is hard-coded.
+The report analyses each matching exposure file in `../data/`. For every trait it includes the overall Cochran's Q heterogeneity test, per-population Q contributions, multiple-testing correction, population-specific effect plots, QQ plots and genomic inflation estimates. If a `Drug` annotation is present, the same heterogeneity analyses are repeated for drug-target SNPs and summarized by drug class. EUR-referenced expected-versus-observed replication analyses are also run for all variants and for drug-target variants when p-values are available.
+
+The overall and drug-target heterogeneity tests each use their own Bonferroni threshold, `0.05 / number of testable SNPs`. FDR-adjusted p-values are reported alongside these thresholds. Replication compares the direction and significance of estimates in each other population against EUR, joining by `snpid` so that estimates cannot become misaligned. A population with no corresponding variant is not included in that variant's replication comparison.
 
 ```{r selected-inputs}
 knitr::kable(data.frame(trait = names(files), input = basename(files)),
@@ -54,8 +61,6 @@ knitr::kable(data.frame(trait = names(files), input = basename(files)),
 ```
 
 # Analysis functions
-
-The original function names are retained. The analysis handles missing estimates and keeps each population's estimates correctly aligned when calculating per-population Q contributions.
 
 ```{r functions}
 fixed_effects_meta_analysis <- function(beta_vec, se_vec) {
@@ -173,7 +178,6 @@ forest_plot <- function(sslist, snp) {
     labs(x = "Effect estimate (95% CI)", y = "Population") + theme_bw()
 }
 
-# Draw population-specific estimates only for selected heterogeneous SNPs.
 plot_heterogeneous_snps <- function(dat, hits, plot_title) {
   if (!nrow(hits)) {
     cat("No SNPs pass the Bonferroni threshold for this analysis.\n")
@@ -188,11 +192,66 @@ plot_heterogeneous_snps <- function(dat, hits, plot_title) {
     labs(title = plot_title, x = "Effect estimate (95% CI)", y = "Population") +
     theme_bw() + theme(legend.position = "none", strip.text = element_text(size = 8))
 }
+
+plot_qj <- function(qj, plot_title) {
+  long <- qj %>% pivot_longer(-snpid, names_to = "population", values_to = "p") %>%
+    filter(is.finite(p), p > 0, p <= 1)
+  if (!nrow(long)) {
+    cat("No per-population Q contribution p-values are available.\n")
+    return(invisible(NULL))
+  }
+  ggplot(long, aes(x = snpid, y = -log10(p), colour = population)) +
+    geom_point() + scale_colour_brewer(type = "qual") +
+    labs(title = plot_title, x = "SNP", y = "-log10 per-population Q p-value", colour = "Population") +
+    theme_bw() + theme(panel.grid.minor = element_blank(), axis.text.x = element_blank(),
+                       axis.ticks.x = element_blank())
+}
+
+make_qq_plot <- function(qj, plot_title) {
+  qqdat <- qj %>% pivot_longer(-snpid, names_to = "Population", values_to = "p") %>%
+    filter(is.finite(p), p > 0, p <= 1) %>%
+    group_by(Population) %>% arrange(p, .by_group = TRUE) %>%
+    mutate(observed = -log10(p), expected = -log10(ppoints(n()))) %>% ungroup()
+  if (!nrow(qqdat)) {
+    cat("No per-population Q contribution p-values are available for a QQ plot.\n")
+    return(invisible(NULL))
+  }
+  lambda_gc <- function(p) {
+    chisq <- qchisq(1 - pmax(pmin(p, 1 - .Machine$double.eps), .Machine$double.xmin), df = 1)
+    median(chisq, na.rm = TRUE) / qchisq(0.5, df = 1)
+  }
+  lambda_df <- qqdat %>% group_by(Population) %>%
+    summarise(lambda = lambda_gc(p), .groups = "drop")
+  qqdat <- qqdat %>% left_join(lambda_df, by = "Population") %>%
+    mutate(Population = factor(Population, levels = lambda_df$Population,
+      labels = sprintf("%s (lambda = %.3f)", lambda_df$Population, lambda_df$lambda)))
+  p <- ggplot(qqdat, aes(expected, observed, colour = Population)) +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "black") +
+    geom_point(size = 1.5, alpha = 0.7) +
+    scale_color_brewer(palette = "Dark2", name = "Population") +
+    labs(title = plot_title, x = "Expected -log10(P)", y = "Observed -log10(P)") +
+    theme_bw() + theme(panel.grid = element_blank(), legend.position = "right")
+  print(p)
+  print(lambda_df)
+  invisible(p)
+}
+
+replication_by_population <- function(reference, target, selection_p, alpha) {
+  if (!"pval" %in% names(reference)) return(NULL)
+  disc <- reference %>% filter(is.finite(pval), pval < selection_p) %>%
+    select(snpid, beta, se)
+  paired <- disc %>% inner_join(target %>% select(snpid, beta, se), by = "snpid",
+                                suffix = c("_disc", "_rep"))
+  result <- expected_vs_observed_replication(
+    paired$beta_disc, paired$beta_rep, paired$se_disc, paired$se_rep, alpha)
+  list(res = result$res, variants = bind_cols(tibble::tibble(snpid = paired$snpid), result$variants),
+       n_discovery = nrow(disc), n_paired = nrow(paired))
+}
 ```
 
 # Results by exposure
 
-```{r analyse-traits, results='asis', fig.height=6}
+```{r analyse-traits, results='asis', fig.height=6, fig.width=10}
 for (trait in names(files)) {
   cat("\n## ", toupper(trait), "\n\n", sep = "")
   dat <- readRDS(files[[trait]])
@@ -216,13 +275,14 @@ for (trait in names(files)) {
   mt_thres <- if (n_tests > 0L) alpha / n_tests else NA_real_
   result$Q <- result$Q %>% mutate(fdr = p.adjust(Qpval, method = "BH")) %>% arrange(Qpval)
   hits <- result$Q %>% filter(!is.na(Qpval), Qpval <= mt_thres)
+  nominal_hits <- result$Q %>% filter(!is.na(Qpval), Qpval < alpha)
 
   counts <- tibble::tibble(population = pops,
     variants = vapply(pops, function(p) sum(dat$pop == p), integer(1)))
   summary <- tibble::tibble(
     variants_tested = n_tests,
     bonferroni_threshold = mt_thres,
-    nominal_Q_p_lt_0_05 = sum(result$Q$Qpval < alpha, na.rm = TRUE),
+    nominal_Q_p_lt_0_05 = nrow(nominal_hits),
     bonferroni_significant = nrow(hits),
     FDR_lt_0_05 = sum(result$Q$fdr < alpha, na.rm = TRUE),
     smallest_Q_p = if (!n_tests) NA_real_ else min(result$Q$Qpval, na.rm = TRUE),
@@ -234,18 +294,66 @@ for (trait in names(files)) {
   print(knitr::kable(summary, digits = 5))
   cat("\n\n**SNPs passing this trait's Bonferroni threshold**\n\n")
   print(knitr::kable(hits %>% select(snpid, n_pop, beta_fixed, se_fixed, Q, Qdf, Qpval, fdr), digits = 5))
-
+  cat("\n\n**Nominally heterogeneous SNPs (Q p < 0.05): per-population Q contributions**\n\n")
+  if (nrow(nominal_hits)) {
+    nominal_qj <- result$Qj %>% semi_join(nominal_hits, by = "snpid")
+    print(knitr::kable(nominal_qj, digits = 5))
+  } else {
+    cat("No SNPs have nominal Q p < 0.05.\n")
+  }
+  cat("\n\n**Per-population Q contribution plot**\n\n")
+  print(plot_qj(result$Qj, paste0(toupper(trait), ": per-population Q contributions")))
+  cat("\n\n**QQ plot and genomic inflation estimates for per-population Q contributions**\n\n")
+  make_qq_plot(result$Qj, paste0(toupper(trait), ": per-population Q contribution QQ plot"))
   cat("\n\n**Population-specific estimates for Bonferroni-significant SNPs**\n\n")
   print(plot_heterogeneous_snps(dat, hits, paste0(toupper(trait), ": Bonferroni-significant heterogeneity SNPs")))
 
-  cat("\n\n**Population-level Q contribution summary**\n\n")
   qj_long <- result$Qj %>% pivot_longer(-snpid, names_to = "population", values_to = "p") %>%
     filter(!is.na(p))
   qj_summary <- qj_long %>% group_by(population) %>%
     summarise(variants_with_estimate = n(),
       fraction_contribution_p_lt_0_05 = mean(p < alpha), .groups = "drop") %>%
     arrange(desc(fraction_contribution_p_lt_0_05))
+  cat("\n\n**Population-level Q contribution summary**\n\n")
   print(knitr::kable(qj_summary, digits = 3))
+
+  # EUR-referenced expected-versus-observed replication for the full exposure.
+  if ("EUR" %in% pops && "pval" %in% names(dat)) {
+    cat("\n\n### Expected versus observed replication: all exposure SNPs\n\n")
+    reference <- filter(dat, pop == "EUR")
+    replication_rows <- list()
+    replication_failures <- list()
+    for (target_pop in setdiff(pops, "EUR")) {
+      comparison <- replication_by_population(reference, filter(dat, pop == target_pop),
+                                               replication_discovery_p, alpha)
+      if (is.null(comparison)) next
+      replication_rows[[target_pop]] <- comparison$res %>%
+        mutate(comparison = paste("EUR vs", target_pop),
+               n_discovery = comparison$n_discovery, n_paired = comparison$n_paired, .before = 1)
+      if (nrow(comparison$variants)) {
+        replication_failures[[target_pop]] <- comparison$variants %>%
+          mutate(comparison = paste("EUR vs", target_pop), .before = 1)
+      }
+    }
+    if (length(replication_rows)) {
+      replication_table <- bind_rows(replication_rows)
+      print(knitr::kable(replication_table, digits = 5,
+        caption = paste0("EUR discovery SNPs with p < ", format(replication_discovery_p, scientific = TRUE),
+                         "; replication significance alpha = 0.05")))
+      failure_table <- bind_rows(replication_failures)
+      if (nrow(failure_table)) {
+        failures <- failure_table %>% filter(replication_fail | sign_fail) %>%
+          select(comparison, snpid, expected_pval, observed_pval, replication_fail,
+                 expected_sign, observed_sign, sign_fail)
+        cat("\n\n**Variants with expected-but-not-observed replication**\n\n")
+        if (nrow(failures)) print(knitr::kable(failures, digits = 5)) else cat("No variants meet the expected replication failure criteria.\n")
+      }
+    } else {
+      cat("Replication analysis skipped: EUR estimates or p-values are unavailable.\n")
+    }
+  } else {
+    cat("\n\nReplication analysis skipped: EUR data or p-values are unavailable.\n")
+  }
 
   if ("Drug" %in% names(dat)) {
     dat_drug <- dat %>% filter(!is.na(Drug), as.character(Drug) != "")
@@ -255,25 +363,75 @@ for (trait in names(files)) {
       drug_result <- heterogeneity_test(drug_sslist)
       n_drug_tests <- sum(!is.na(drug_result$Q$Qpval))
       drug_mt_thres <- if (n_drug_tests > 0L) alpha / n_drug_tests else NA_real_
-      drug_result$Q <- drug_result$Q %>% mutate(fdr = p.adjust(Qpval, method = "BH"))
+      drug_result$Q <- drug_result$Q %>% mutate(fdr = p.adjust(Qpval, method = "BH")) %>% arrange(Qpval)
       drug_hits <- drug_result$Q %>% filter(!is.na(Qpval), Qpval <= drug_mt_thres)
+      drug_nominal_hits <- drug_result$Q %>% filter(!is.na(Qpval), Qpval < alpha)
       drug_map <- dat_drug %>% distinct(snpid, Drug)
       drug_summary <- drug_result$Q %>% left_join(drug_map, by = "snpid") %>%
         group_by(Drug) %>% summarise(n_snps = n_distinct(snpid),
+          n_nominal_Q_p_lt_0_05 = n_distinct(snpid[snpid %in% drug_nominal_hits$snpid]),
           n_bonferroni_significant = n_distinct(snpid[snpid %in% drug_hits$snpid]),
           proportion_FDR_lt_0_05 = mean(fdr < alpha, na.rm = TRUE),
-          median_Q_p = median(Qpval, na.rm = TRUE), .groups = "drop") %>%
+          median_Q_p = median(Qpval, na.rm = TRUE), median_FDR = median(fdr, na.rm = TRUE),
+          min_FDR = min(fdr, na.rm = TRUE), .groups = "drop") %>%
         arrange(desc(n_bonferroni_significant), median_Q_p)
-      cat("\n\n**Drug-target subset summary**\n\n")
+      cat("\n\n### Drug-target subset heterogeneity\n\n")
       cat("Tests: ", n_drug_tests, "; Bonferroni threshold: ", signif(drug_mt_thres, 5),
           "; significant SNPs: ", nrow(drug_hits), "\n\n", sep = "")
+      cat("**Summary by drug class**\n\n")
       print(knitr::kable(drug_summary, digits = 4))
       cat("\n\n**Drug-target SNPs passing this subset's Bonferroni threshold**\n\n")
       print(knitr::kable(drug_hits %>% left_join(drug_map, by = "snpid") %>%
         select(snpid, Drug, n_pop, beta_fixed, se_fixed, Q, Qdf, Qpval, fdr), digits = 5))
+      cat("\n\n**Nominal drug-target heterogeneity: per-population Q contributions**\n\n")
+      if (nrow(drug_nominal_hits)) {
+        drug_nominal_qj <- drug_result$Qj %>% semi_join(drug_nominal_hits, by = "snpid") %>%
+          left_join(drug_map, by = "snpid")
+        print(knitr::kable(drug_nominal_qj, digits = 5))
+      } else {
+        cat("No drug-target SNPs have nominal Q p < 0.05.\n")
+      }
+      cat("\n\n**Drug-target per-population Q contribution plot**\n\n")
+      print(plot_qj(drug_result$Qj, paste0(toupper(trait), ": drug-target per-population Q contributions")))
+      cat("\n\n**Drug-target QQ plot and genomic inflation estimates**\n\n")
+      make_qq_plot(drug_result$Qj, paste0(toupper(trait), ": drug-target Q contribution QQ plot"))
       cat("\n\n**Population-specific estimates for drug-target Bonferroni hits**\n\n")
       print(plot_heterogeneous_snps(dat_drug, drug_hits,
         paste0(toupper(trait), ": drug-target Bonferroni-significant SNPs")))
+
+      drug_qj_summary <- drug_result$Qj %>% left_join(drug_map, by = "snpid") %>%
+        pivot_longer(all_of(drug_pops), names_to = "population", values_to = "p") %>%
+        group_by(Drug, population) %>%
+        summarise(variants_with_estimate = sum(!is.na(p)),
+          fraction_contribution_p_lt_0_05 = if (all(is.na(p))) NA_real_ else mean(p < alpha, na.rm = TRUE),
+          .groups = "drop") %>% arrange(Drug, desc(fraction_contribution_p_lt_0_05))
+      cat("\n\n**Per-population Q contribution fractions by drug class**\n\n")
+      print(knitr::kable(drug_qj_summary, digits = 3))
+
+      # Drug-target EUR replication, using nominal EUR discovery p < 0.05 as in
+      # the original target-stratified analysis. Pair variants by identifier.
+      if ("EUR" %in% drug_pops && "pval" %in% names(dat_drug)) {
+        cat("\n\n### Expected versus observed replication: drug-target SNPs\n\n")
+        drug_reference <- filter(dat_drug, pop == "EUR")
+        drug_replication_rows <- list()
+        for (target_pop in setdiff(drug_pops, "EUR")) {
+          comparison <- replication_by_population(drug_reference, filter(dat_drug, pop == target_pop),
+                                                   drug_replication_discovery_p, alpha)
+          if (is.null(comparison)) next
+          drug_replication_rows[[target_pop]] <- comparison$res %>%
+            mutate(comparison = paste("EUR vs", target_pop),
+                   n_discovery = comparison$n_discovery, n_paired = comparison$n_paired, .before = 1)
+        }
+        if (length(drug_replication_rows)) {
+          print(knitr::kable(bind_rows(drug_replication_rows), digits = 5,
+            caption = paste0("Drug-target EUR discovery SNPs with p < ", drug_replication_discovery_p,
+                             "; replication significance alpha = 0.05")))
+        } else {
+          cat("No drug-target replication comparisons are available.\n")
+        }
+      } else {
+        cat("\n\nDrug-target replication skipped: EUR data or p-values are unavailable.\n")
+      }
     } else {
       cat("\n\nDrug-target analysis skipped: fewer than two populations have annotated variants.\n")
     }
@@ -286,10 +444,14 @@ for (trait in names(files)) {
 
 # Interpretation and reproducibility
 
-Each exposure gets its own Bonferroni denominator, calculated from the number of SNP-level Q tests with valid estimates in at least two populations. The drug-target subset is corrected separately using its own number of testable SNPs. Effect plots show only variants passing the corresponding threshold; when no variant passes, the report states this explicitly. BH FDR is also provided as a complementary multiple-testing measure within each exposure. Per-population Q contribution p-values are descriptive and should not be treated as independent tests.
+For each exposure, Cochran's Q is calculated from the population-specific estimates using inverse-variance fixed-effect weights. The per-population Q contribution p-values describe how much each population's estimate contributes to the overall heterogeneity statistic; they are descriptive follow-up tests, while the SNP-level Q p-value is the primary heterogeneity test. Bonferroni correction and FDR are calculated separately for the full exposure and its drug-target subset.
+
+Replication uses EUR as the discovery/reference population and tests concordance of effect direction and replication p-value against the expected rates under the discovery effects and replication standard errors. All cross-population comparisons are matched by SNP identifier. The all-exposure discovery threshold is `r format(replication_discovery_p, scientific = TRUE)`; the drug-target discovery threshold is `r drug_replication_discovery_p`. These thresholds can be changed in the setup chunk if a different replication definition is intended.
 
 ```{r session-info}
 cat("Selected traits:", paste(names(files), collapse = ", "), "\n")
-cat("Population labels configured:", paste(populations, collapse = ", "), "\n\n")
+cat("Population labels configured:", paste(populations, collapse = ", "), "\n")
+cat("Overall replication discovery p threshold:", replication_discovery_p, "\n")
+cat("Drug-target replication discovery p threshold:", drug_replication_discovery_p, "\n\n")
 print(sessionInfo())
 ```
