@@ -191,6 +191,86 @@ plot_heterogeneous_snps <- function(dat, hits, plot_title) {
     theme_bw() + theme(legend.position = "none", strip.text = element_text(size = 8))
 }
 
+# Forest plot for drug-target Bonferroni hits. Everything is derived from the
+# data: SNPs are ordered by heterogeneity p-value (strongest at the top), strip
+# labels are "chr:pos_<target gene>", the combined row is the IVW fixed-effect
+# estimate from heterogeneity_test(), and the population making the largest
+# contribution to Q (smallest per-population Q p-value) is drawn as a square.
+# Returns a list of plots, with at most snps_per_page SNPs per plot.
+plot_drug_hits_forest <- function(dat, hits, qj, plot_title, snps_per_page = 3,
+                                  gene_cols = c("Target gene", "target_gene", "gene", "Gene")) {
+  if (!nrow(hits)) {
+    cat("No SNPs pass the Bonferroni threshold for this analysis.\n")
+    return(invisible(NULL))
+  }
+  hits <- hits %>% arrange(Qpval)
+  snp_order <- hits$snpid
+
+  # Strip labels: chromosome:position followed by the annotated target gene.
+  gene_col <- intersect(gene_cols, names(dat))[1]
+  label_dat <- dat %>% filter(snpid %in% snp_order) %>% distinct(snpid, .keep_all = TRUE)
+  genes <- if (is.na(gene_col)) rep(NA_character_, nrow(label_dat)) else as.character(label_dat[[gene_col]])
+  strip_labels <- ifelse(is.na(genes) | genes == "", label_dat$snpid,
+                         paste0(sub("_.*$", "", label_dat$snpid), "_", genes))
+  strip_labels <- stats::setNames(strip_labels, label_dat$snpid)
+
+  # Population with the largest Q contribution for each SNP.
+  lead_pop <- qj %>% filter(snpid %in% snp_order) %>%
+    pivot_longer(-snpid, names_to = "pop", values_to = "p") %>%
+    filter(is.finite(p)) %>% group_by(snpid) %>% filter(p == min(p)) %>%
+    ungroup() %>% transmute(snpid, pop, lead = TRUE)
+
+  point_levels <- c("Population estimate", "Largest Q contribution", "Combined (IVW fixed effect)")
+  plot_dat <- bind_rows(
+    dat %>% filter(snpid %in% snp_order) %>% select(snpid, pop, beta, se) %>%
+      mutate(pop = as.character(pop)),
+    hits %>% transmute(snpid, pop = "Combined", beta = beta_fixed, se = se_fixed)
+  ) %>%
+    left_join(lead_pop, by = c("snpid", "pop")) %>%
+    mutate(
+      point_type = factor(case_when(pop == "Combined" ~ point_levels[3],
+                                    !is.na(lead) ~ point_levels[2],
+                                    TRUE ~ point_levels[1]), levels = point_levels),
+      # Reverse so populations read top-down with Combined at the bottom.
+      pop = factor(pop, levels = rev(c(populations, "Combined"))),
+      snpid = factor(snpid, levels = snp_order)
+    )
+
+  # Split many hits across several figures so each panel stays legible.
+  pages <- split(snp_order, ceiling(seq_along(snp_order) / snps_per_page))
+  lapply(seq_along(pages), function(i) {
+    page_title <- if (length(pages) > 1L)
+      sprintf("%s (%d of %d)", plot_title, i, length(pages)) else plot_title
+    page_dat <- plot_dat %>% filter(snpid %in% pages[[i]]) %>%
+      mutate(snpid = factor(as.character(snpid), levels = pages[[i]]))
+    forest_page(page_dat, strip_labels, point_levels, page_title)
+  })
+}
+
+forest_page <- function(plot_dat, strip_labels, point_levels, plot_title) {
+  ggplot(plot_dat, aes(x = beta, y = pop, shape = point_type)) +
+    geom_point(size = 3) +
+    geom_errorbarh(aes(xmin = beta - 1.96 * se, xmax = beta + 1.96 * se), height = 0) +
+    geom_vline(xintercept = 0, linetype = "dotted") +
+    facet_grid(snpid ~ ., switch = "y", scales = "free_y", space = "free_y",
+               labeller = labeller(snpid = as_labeller(strip_labels))) +
+    scale_shape_manual(values = stats::setNames(c(19, 15, 17), point_levels), drop = FALSE,
+                       name = NULL) +
+    labs(title = plot_title, x = "Beta (95% CI)") +
+    theme(
+      axis.title.y = element_blank(),
+      axis.text.y = element_text(size = 11),
+      axis.ticks.y = element_blank(),
+      axis.text.x = element_text(size = 11),
+      panel.background = element_blank(),
+      panel.border = element_rect(colour = "black", fill = NA),
+      strip.background = element_rect(colour = "black"),
+      strip.text = element_text(colour = "black"),
+      strip.placement = "outside",
+      legend.position = "bottom"
+    )
+}
+
 plot_qj <- function(qj, plot_title) {
   long <- qj %>% pivot_longer(-snpid, names_to = "population", values_to = "p") %>%
     filter(is.finite(p), p > 0, p <= 1)
@@ -397,8 +477,9 @@ for (trait in names(files)) {
       cat("\n\n**Drug-target QQ plot and genomic inflation estimates**\n\n")
       make_qq_plot(drug_result$Qj, paste0(toupper(trait), ": drug-target Q contribution QQ plot"))
       cat("\n\n**Population-specific estimates for drug-target Bonferroni hits**\n\n")
-      print(plot_heterogeneous_snps(dat_drug, drug_hits,
-        paste0(toupper(trait), ": drug-target Bonferroni-significant SNPs")))
+      drug_forest_plots <- plot_drug_hits_forest(dat_drug, drug_hits, drug_result$Qj,
+        paste0(toupper(trait), ": drug-target Bonferroni-significant SNPs"))
+      for (p in drug_forest_plots) print(p)
 
       drug_qj_summary <- drug_result$Qj %>% left_join(drug_map, by = "snpid") %>%
         pivot_longer(all_of(drug_pops), names_to = "population", values_to = "p") %>%
