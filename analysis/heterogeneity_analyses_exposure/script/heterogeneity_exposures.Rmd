@@ -16,7 +16,7 @@ params:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
                       fig.align = "center", out.width = "100%")
-required_packages <- c("dplyr", "tidyr", "ggplot2", "knitr", "rmarkdown")
+required_packages <- c("dplyr", "tidyr", "ggplot2", "knitr", "rmarkdown", "scales")
 missing <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
 if (length(missing)) stop("Install required packages: ", paste(missing, collapse = ", "))
 suppressPackageStartupMessages({
@@ -47,6 +47,24 @@ alpha <- 0.05
 # all SNPs, and nominal significance in the drug-target subset.
 replication_discovery_p <- 5e-8
 drug_replication_discovery_p <- 0.05
+
+# Per-population heterogeneity contribution:
+#   "loo" = leave-one-out standardised residual (recommended; ~N(0, 1) under
+#           homogeneity for every population, including heavily weighted EUR)
+#   "qj"  = original Q_j = w_j (beta_j - beta_IVW)^2 compared with chi-square(1)
+#           (deflated for populations that dominate the IVW estimate)
+contribution_method <- "loo"
+
+# Cross-ancestry scatter figures (EUR vs each non-EUR population). Traits are
+# grouped into one figure per group; traits absent from `files` are dropped.
+figure_groups <- list(
+  blood_pressure = c("sbp", "dbp", "pp"),
+  lipids = c("ldlc", "hdl", "tg")
+)
+trait_labels <- c(sbp = "SBP", dbp = "DBP", pp = "PP",
+                  ldlc = "LDL-C", hdl = "HDL-C", tg = "Triglycerides")
+figure_dir <- file.path("..", "figures")
+show_ci <- TRUE  # draw 95% CIs for the non-EUR estimates
 ```
 
 # Analysis overview
@@ -76,8 +94,19 @@ fixed_effects_meta_analysis <- function(beta_vec, se_vec) {
   Q <- sum(Qj)
   Qdf <- n - 1L
   Qpval <- if (Qdf > 0L) pchisq(Q, df = Qdf, lower.tail = FALSE) else NA_real_
+  # Leave-one-out standardised residual: compare each population with the IVW
+  # estimate of all *other* populations. Unlike Q_j, this is ~N(0, 1) under
+  # homogeneity whatever the population's weight.
+  loo_z <- if (n >= 2L) {
+    vapply(seq_len(n), function(j) {
+      b_minus <- sum(beta_vec[-j] * w[-j]) / sum(w[-j])
+      se_minus <- sqrt(1 / sum(w[-j]))
+      (beta_vec[j] - b_minus) / sqrt(se_vec[j]^2 + se_minus^2)
+    }, numeric(1))
+  } else rep(NA_real_, n)
   list(beta = beta, se = se, Q = Q, Qdf = Qdf, Qpval = Qpval,
-       Qj = Qj, Qjpval = pchisq(Qj, df = 1, lower.tail = FALSE))
+       Qj = Qj, Qjpval = pchisq(Qj, df = 1, lower.tail = FALSE),
+       loo_z = loo_z, loo_pval = 2 * pnorm(-abs(loo_z)))
 }
 
 combine_data <- function(sslist) {
@@ -97,7 +126,9 @@ combine_data <- function(sslist) {
   Reduce(function(x, y) full_join(x, y, by = "snpid"), pieces)
 }
 
-heterogeneity_test <- function(sslist) {
+heterogeneity_test <- function(sslist, contribution = contribution_method) {
+  contribution <- match.arg(contribution, c("loo", "qj"))
+  contribution_field <- if (contribution == "loo") "loo_pval" else "Qjpval"
   if (length(sslist) < 2L) stop("At least two population datasets are required")
   if (is.null(names(sslist)) || any(names(sslist) == "")) stop("sslist must be a named list")
   joined <- combine_data(sslist)
@@ -121,7 +152,7 @@ heterogeneity_test <- function(sslist) {
                    dimnames = list(NULL, names(sslist)))
   for (i in seq_along(analyses)) {
     valid <- is.finite(beta_mat[i, ]) & is.finite(se_mat[i, ]) & se_mat[i, ] > 0
-    if (any(valid)) qj_mat[i, valid] <- analyses[[i]]$Qjpval
+    if (any(valid)) qj_mat[i, valid] <- analyses[[i]][[contribution_field]]
   }
   qj <- as_tibble(qj_mat)
   qj$snpid <- joined$snpid
@@ -139,9 +170,13 @@ expected_vs_observed_replication <- function(b_disc, b_rep, se_disc, se_rep, alp
   se_disc <- se_disc[keep]; se_rep <- se_rep[keep]
   p_sign <- pnorm(-abs(b_disc) / se_disc) * pnorm(-abs(b_disc) / se_rep) +
     (1 - pnorm(-abs(b_disc) / se_disc)) * (1 - pnorm(-abs(b_disc) / se_rep))
+  # Expected power to reach two-sided significance in the replication sample if
+  # the true effect equals the discovery estimate. (Previously the second term
+  # used +abs(b_disc), so both terms were the lower tail and power was ~0.)
   p_sig <- pnorm(-abs(b_disc) / se_rep + qnorm(alpha / 2)) +
-    (1 - pnorm(abs(b_disc) / se_rep - qnorm(alpha / 2)))
-  p_rep <- pnorm(abs(b_rep) / se_rep, lower.tail = FALSE)
+    (1 - pnorm(-abs(b_disc) / se_rep - qnorm(alpha / 2)))
+  # Two-sided replication p-value, matching the two-sided expectation above.
+  p_rep <- 2 * pnorm(abs(b_rep) / se_rep, lower.tail = FALSE)
   n <- length(b_disc)
   expected_sign <- sum(p_sign); observed_sign <- sum(sign(b_disc) == sign(b_rep))
   expected_sig <- sum(p_sig); observed_sig <- sum(p_rep < alpha)
@@ -155,7 +190,7 @@ expected_vs_observed_replication <- function(b_disc, b_rep, se_disc, se_rep, alp
       value = c(expected_sign, observed_sign, expected_sig, observed_sig),
       pdiff = c(NA_real_, binom_p(observed_sign, expected_sign), NA_real_,
                 binom_p(observed_sig, expected_sig))),
-    variants = tibble::tibble(expected_pval = p_sig, observed_pval = p_rep < alpha,
+    variants = tibble::tibble(expected_power = p_sig, observed_sig = p_rep < alpha,
       replication_fail = p_sig > 0.95 & !(p_rep < alpha),
       expected_sign = p_sign, observed_sign = sign(b_disc) == sign(b_rep),
       sign_fail = p_sign > 0.95 & !(sign(b_disc) == sign(b_rep)))
@@ -280,7 +315,7 @@ plot_qj <- function(qj, plot_title) {
   }
   ggplot(long, aes(x = snpid, y = -log10(p), colour = population)) +
     geom_point() + scale_colour_brewer(type = "qual") +
-    labs(title = plot_title, x = "SNP", y = "-log10 per-population Q p-value", colour = "Population") +
+    labs(title = plot_title, x = "SNP", y = "-log10 per-population contribution p-value", colour = "Population") +
     theme_bw() + theme(panel.grid.minor = element_blank(), axis.text.x = element_blank(),
                        axis.ticks.x = element_blank())
 }
@@ -325,11 +360,95 @@ replication_by_population <- function(reference, target, selection_p, alpha) {
   list(res = result$res, variants = bind_cols(tibble::tibble(snpid = paired$snpid), result$variants),
        n_discovery = nrow(disc), n_paired = nrow(paired))
 }
+
+# Pair each non-EUR population with EUR and orient every SNP to the
+# EUR effect-increasing allele (both betas flipped when the EUR beta is
+# negative). Assumes alleles are already harmonised to EUR upstream.
+eur_oriented_pairs <- function(dat, pops) {
+  eur <- dat %>% filter(pop == "EUR") %>% select(snpid, beta_EUR = beta, se_EUR = se)
+  dat %>% filter(pop %in% setdiff(pops, "EUR")) %>%
+    select(snpid, pop, beta, se) %>%
+    inner_join(eur, by = "snpid") %>%
+    mutate(flip = ifelse(beta_EUR < 0, -1, 1),
+           x = beta_EUR * flip, y = beta * flip,
+           x_se = se_EUR, y_se = se)
+}
+
+# Per-population transferability summary against EUR:
+#   IVW slope through the origin of non-EUR on EUR betas (weights 1/se_pop^2),
+#   proportion of SNPs with the same sign, and the Pearson correlation.
+transferability_summary <- function(pairs) {
+  pairs %>% group_by(pop) %>%
+    summarise(
+      n_snps = n(),
+      ivw_slope = sum(x * y / y_se^2) / sum(x^2 / y_se^2),
+      ivw_slope_se = sqrt(1 / sum(x^2 / y_se^2)),
+      sign_concordance = mean(y > 0),
+      pearson_r = cor(x, y),
+      .groups = "drop"
+    ) %>%
+    mutate(ivw_slope_lci = ivw_slope - 1.96 * ivw_slope_se,
+           ivw_slope_uci = ivw_slope + 1.96 * ivw_slope_se,
+           .after = ivw_slope_se)
+}
+
+# Grid of EUR vs non-EUR scatter plots: rows = traits, columns = populations.
+# Every row shares its axis limits, so panels within a trait are comparable.
+plot_cross_ancestry <- function(pairs_by_trait, plot_title = NULL, show_ci = TRUE) {
+  label_of <- function(tr) dplyr::coalesce(unname(trait_labels[tr]), toupper(tr))
+  pairs <- bind_rows(pairs_by_trait, .id = "trait") %>%
+    mutate(trait_label = factor(label_of(trait), levels = label_of(names(pairs_by_trait))),
+           pop = factor(pop, levels = intersect(setdiff(populations, "EUR"), unique(pop))))
+  stats <- pairs %>% group_by(trait, trait_label) %>%
+    group_modify(~ transferability_summary(.x)) %>%
+    ungroup() %>%
+    mutate(pop = factor(pop, levels = levels(pairs$pop))) %>%
+    mutate(label = sprintf("slope %.2f (%.2f, %.2f)\nsign %.0f%%, n = %d",
+                           ivw_slope, ivw_slope_lci, ivw_slope_uci,
+                           100 * sign_concordance, n_snps))
+  # Per-trait limits, shared across populations; include 0 and the x range
+  # so the y = x line is always visible.
+  lims <- pairs %>% group_by(trait_label) %>%
+    summarise(xmax = max(x) * 1.05,
+              ymin = min(c(y, 0)), ymax = max(c(y, x)), .groups = "drop")
+  blank <- bind_rows(
+    lims %>% transmute(trait_label, x = 0, y = ymin),
+    lims %>% transmute(trait_label, x = xmax, y = ymax)
+  ) %>% tidyr::crossing(pop = factor(levels(pairs$pop), levels = levels(pairs$pop)))
+  ci <- pairs %>% left_join(lims, by = "trait_label") %>%
+    mutate(lo = pmax(y - 1.96 * y_se, ymin), hi = pmin(y + 1.96 * y_se, ymax))
+
+  p <- ggplot(pairs, aes(x, y)) +
+    geom_blank(data = blank) +
+    geom_hline(yintercept = 0, colour = "grey85") +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "grey40")
+  if (show_ci) {
+    p <- p + geom_linerange(data = ci, aes(ymin = lo, ymax = hi),
+                            colour = "grey70", alpha = 0.35, linewidth = 0.3)
+  }
+  p + geom_point(size = 0.9, alpha = 0.6) +
+    geom_abline(data = stats, aes(intercept = 0, slope = ivw_slope),
+                colour = "#1f77b4", linewidth = 0.6) +
+    geom_text(data = stats, aes(x = -Inf, y = Inf, label = label),
+              hjust = -0.05, vjust = 1.15, size = 2.6, lineheight = 0.9) +
+    facet_wrap(vars(trait_label, pop), ncol = nlevels(pairs$pop), scales = "free") +
+    scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
+    scale_y_continuous(breaks = scales::breaks_pretty(n = 4)) +
+    labs(title = plot_title,
+         x = "European beta (oriented to EUR effect-increasing allele)",
+         y = "Non-European beta (same allele)") +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          strip.background = element_rect(fill = "grey95"),
+          strip.text = element_text(face = "bold"))
+}
 ```
 
 # Results by exposure
 
 ```{r analyse-traits, results='asis', fig.height=6, fig.width=10}
+all_pairs <- list()
+all_transferability <- list()
 for (trait in names(files)) {
   cat("\n## ", toupper(trait), "\n\n", sep = "")
   dat <- readRDS(files[[trait]])
@@ -349,6 +468,13 @@ for (trait in names(files)) {
   }
   sslist <- stats::setNames(lapply(pops, function(p) filter(dat, pop == p)), pops)
   result <- heterogeneity_test(sslist)
+
+  # EUR-referenced transferability: IVW slope, sign concordance, correlation.
+  if ("EUR" %in% pops) {
+    all_pairs[[trait]] <- eur_oriented_pairs(dat, pops)
+    all_transferability[[trait]] <- transferability_summary(all_pairs[[trait]]) %>%
+      mutate(trait = trait, .before = 1)
+  }
   n_tests <- sum(!is.na(result$Q$Qpval))
   mt_thres <- if (n_tests > 0L) alpha / n_tests else NA_real_
   result$Q <- result$Q %>% mutate(fdr = p.adjust(Qpval, method = "BH")) %>% arrange(Qpval)
@@ -370,6 +496,10 @@ for (trait in names(files)) {
   print(knitr::kable(counts))
   cat("\n\n**Overall heterogeneity summary**\n\n")
   print(knitr::kable(summary, digits = 5))
+  if (!is.null(all_transferability[[trait]])) {
+    cat("\n\n**Transferability versus EUR (SNPs oriented to the EUR effect-increasing allele)**\n\n")
+    print(knitr::kable(all_transferability[[trait]] %>% select(-trait), digits = 3))
+  }
   cat("\n\n**SNPs passing this trait's Bonferroni threshold**\n\n")
   print(knitr::kable(hits %>% select(snpid, n_pop, beta_fixed, se_fixed, Q, Qdf, Qpval, fdr), digits = 5))
   cat("\n\n**Nominally heterogeneous SNPs (Q p < 0.05): per-population Q contributions**\n\n")
@@ -379,7 +509,7 @@ for (trait in names(files)) {
   } else {
     cat("No SNPs have nominal Q p < 0.05.\n")
   }
-  cat("\n\n**Per-population Q contribution plot**\n\n")
+  cat("\n\n**Per-population Q contribution plot** (method: ", contribution_method, ")\n\n", sep = "")
   print(plot_qj(result$Qj, paste0(toupper(trait), ": per-population Q contributions")))
   cat("\n\n**QQ plot and genomic inflation estimates for per-population Q contributions**\n\n")
   make_qq_plot(result$Qj, paste0(toupper(trait), ": per-population Q contribution QQ plot"))
@@ -424,7 +554,7 @@ for (trait in names(files)) {
       failure_table <- bind_rows(replication_failures)
       if (nrow(failure_table)) {
         failures <- failure_table %>% filter(replication_fail | sign_fail) %>%
-          select(comparison, snpid, expected_pval, observed_pval, replication_fail,
+          select(comparison, snpid, expected_power, observed_sig, replication_fail,
                  expected_sign, observed_sign, sign_fail)
         cat("\n\n**Variants with expected-but-not-observed replication**\n\n")
         if (nrow(failures)) print(knitr::kable(failures, digits = 5)) else cat("No variants meet the expected replication failure criteria.\n")
@@ -527,14 +657,40 @@ for (trait in names(files)) {
 }
 ```
 
+# Cross-ancestry effect comparison figures
+
+Each panel plots non-European against European effect estimates for the LD-clumped instruments, with every SNP oriented to the European effect-increasing allele, so concordant SNPs lie above zero. The dashed line is y = x and the blue line is the IVW slope through the origin. Grey bars are 95% CIs for the non-European estimates, truncated at the panel limits. Panels in the same row share axis limits. Figures are also saved to `figure_dir` as PDF and PNG.
+
+```{r cross-ancestry-figures, fig.width=12, fig.height=8}
+dir.create(figure_dir, showWarnings = FALSE, recursive = TRUE)
+for (group in names(figure_groups)) {
+  group_traits <- intersect(figure_groups[[group]], names(all_pairs))
+  if (!length(group_traits)) next
+  p <- plot_cross_ancestry(all_pairs[group_traits], show_ci = show_ci)
+  print(p)
+  for (ext in c("pdf", "png")) {
+    ggsave(file.path(figure_dir, paste0("cross_ancestry_", group, ".", ext)), p,
+           width = 12, height = 2.8 * length(group_traits) + 0.6, dpi = 300)
+  }
+}
+```
+
+```{r transferability-table}
+if (length(all_transferability)) {
+  knitr::kable(bind_rows(all_transferability), digits = 3,
+               caption = "IVW slope of non-EUR on EUR betas, sign concordance and correlation, by trait and population")
+}
+```
+
 # Interpretation and reproducibility
 
-For each exposure, Cochran's Q is calculated from the population-specific estimates using inverse-variance fixed-effect weights. Per-population Q contribution p-values describe each population's contribution to the overall heterogeneity statistic. Replication uses EUR as the discovery/reference population and compares observed replication with expected rates under the discovery effects and replication sampling variation.
+For each exposure, Cochran's Q is calculated from the population-specific estimates using inverse-variance fixed-effect weights. Per-population contribution p-values describe how far each population departs from the others. With `contribution_method = "loo"` (default), each population's estimate is compared with the IVW estimate of the remaining populations, (beta_j - beta_-j) / sqrt(se_j^2 + se_-j^2), which is ~N(0, 1) under homogeneity for every population. The original Q_j = w_j (beta_j - beta_IVW)^2 statistic (`"qj"`) is deflated for populations that dominate the IVW estimate, such as EUR. Replication uses EUR as the discovery/reference population and compares observed replication with expected rates under the discovery effects and replication sampling variation. Expected significance is the two-sided power at alpha given the discovery effect and the replication SE, and observed significance uses a two-sided replication p-value. Because EUR discovery effects are selected on significance, they may be inflated by winner's curse, so expected counts are likely upper bounds. Non-EUR estimates in the input files have been rescaled by their slope against EUR (beta / slope, se / slope); this preserves each SNP's z-statistic, sign and significance, but it means the scatter-plot slopes are close to 1 partly by construction.
 
 ```{r session-info}
 cat("Selected traits:", paste(names(files), collapse = ", "), "\n")
 cat("Population labels configured:", paste(populations, collapse = ", "), "\n")
 cat("Overall replication discovery p threshold:", replication_discovery_p, "\n")
-cat("Drug-target replication discovery p threshold:", drug_replication_discovery_p, "\n\n")
+cat("Drug-target replication discovery p threshold:", drug_replication_discovery_p, "\n")
+cat("Per-population contribution method:", contribution_method, "\n\n")
 print(sessionInfo())
 ```
