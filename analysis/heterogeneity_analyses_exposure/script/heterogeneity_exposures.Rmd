@@ -65,6 +65,12 @@ trait_labels <- c(sbp = "SBP", dbp = "DBP", pp = "PP",
                   ldlc = "LDL-C", hdl = "HDL-C", tg = "Triglycerides")
 figure_dir <- file.path("..", "figures")
 show_ci <- TRUE  # draw 95% CIs for the non-EUR estimates
+
+# Standard error of the genomic inflation factor (lambda) in the QQ plots:
+# "bootstrap" (resample SNPs) or "asymptotic" (large-sample SE of a median).
+lambda_se_method <- "bootstrap"
+lambda_boot_n <- 1000
+lambda_boot_seed <- 20261127
 ```
 
 # Analysis overview
@@ -320,33 +326,107 @@ plot_qj <- function(qj, plot_title) {
                        axis.ticks.x = element_blank())
 }
 
+# Genomic inflation factor from p-values: median(chi-square_1) / median under the null.
+lambda_gc <- function(p) {
+  chisq <- qchisq(pmax(pmin(p, 1), .Machine$double.xmin), df = 1, lower.tail = FALSE)
+  median(chisq, na.rm = TRUE) / qchisq(0.5, df = 1)
+}
+
+# Standard error of lambda.
+#   "bootstrap"  : resample SNPs with replacement (lambda_boot_n times) and take
+#                  the SD of the bootstrap lambdas. Makes no distributional
+#                  assumption; reproducible via lambda_boot_seed.
+#   "asymptotic" : large-sample SE of a sample median, assuming the statistics
+#                  follow lambda x chi-square_1:
+#                  SE = lambda / (2 * f(m) * m * sqrt(n)), where m = median of
+#                  chi-square_1 and f its density at m (SE ~= 2.33 lambda / sqrt(n)).
+lambda_se <- function(p, method = lambda_se_method, B = lambda_boot_n) {
+  p <- p[is.finite(p)]
+  n <- length(p)
+  if (n < 2L) return(NA_real_)
+  if (method == "asymptotic") {
+    m <- qchisq(0.5, df = 1)
+    return(lambda_gc(p) / (2 * dchisq(m, df = 1) * m * sqrt(n)))
+  }
+  if (method != "bootstrap") stop("lambda_se_method must be 'bootstrap' or 'asymptotic'")
+  boot <- vapply(seq_len(B), function(i) lambda_gc(sample(p, n, replace = TRUE)), numeric(1))
+  stats::sd(boot)
+}
+
+lambda_table <- function(qj) {
+  long <- qj %>% pivot_longer(-snpid, names_to = "Population", values_to = "p") %>%
+    filter(is.finite(p), p > 0, p <= 1)
+  if (!nrow(long)) return(NULL)
+  set.seed(lambda_boot_seed)
+  long %>% group_by(Population) %>%
+    summarise(n_snps = n(), lambda = lambda_gc(p), lambda_se = lambda_se(p),
+              .groups = "drop") %>%
+    # CI and test on the log scale (delta method: SE(log lambda) = SE / lambda),
+    # which keeps the interval positive and suits a scale parameter.
+    mutate(log_se = lambda_se / lambda,
+           lambda_lci = lambda * exp(-1.96 * log_se),
+           lambda_uci = lambda * exp(1.96 * log_se),
+           # Two-sided Wald test of lambda = 1 on the log scale.
+           p_lambda_eq_1 = 2 * pnorm(-abs(log(lambda) / log_se))) %>%
+    select(-log_se)
+}
+
 make_qq_plot <- function(qj, plot_title) {
   qqdat <- qj %>% pivot_longer(-snpid, names_to = "Population", values_to = "p") %>%
     filter(is.finite(p), p > 0, p <= 1) %>%
     group_by(Population) %>% arrange(p, .by_group = TRUE) %>%
-    mutate(observed = -log10(p), expected = -log10(ppoints(n()))) %>% ungroup()
+    mutate(observed = -log10(p), expected = -log10(ppoints(n())), rank = row_number(),
+           n = n()) %>% ungroup()
   if (!nrow(qqdat)) {
     cat("No per-population Q contribution p-values are available for a QQ plot.\n")
     return(invisible(NULL))
   }
-  lambda_gc <- function(p) {
-    chisq <- qchisq(1 - pmax(pmin(p, 1 - .Machine$double.eps), .Machine$double.xmin), df = 1)
-    median(chisq, na.rm = TRUE) / qchisq(0.5, df = 1)
-  }
-  lambda_df <- qqdat %>% group_by(Population) %>%
-    summarise(lambda = lambda_gc(p), .groups = "drop")
-  qqdat <- qqdat %>% left_join(lambda_df, by = "Population") %>%
-    mutate(Population = factor(Population, levels = lambda_df$Population,
-      labels = sprintf("%s (lambda = %.3f)", lambda_df$Population, lambda_df$lambda)))
-  p <- ggplot(qqdat, aes(expected, observed, colour = Population)) +
+  lambda_df <- lambda_table(qj)
+  pop_labels <- sprintf("%s: lambda = %.2f (95%% CI %.2f, %.2f)", lambda_df$Population,
+                        lambda_df$lambda, lambda_df$lambda_lci, lambda_df$lambda_uci)
+  qqdat <- qqdat %>%
+    mutate(Population = factor(Population, levels = lambda_df$Population, labels = pop_labels))
+
+  # Pointwise 95% band for the expected QQ line under the null, using the beta
+  # distribution of uniform order statistics (largest population n).
+  n_max <- max(qqdat$n)
+  band <- tibble::tibble(rank = seq_len(n_max)) %>%
+    mutate(expected = -log10(ppoints(n_max)),
+           lo = -log10(qbeta(0.975, rank, n_max - rank + 1)),
+           hi = -log10(qbeta(0.025, rank, n_max - rank + 1)))
+
+  qq <- ggplot(qqdat, aes(expected, observed, colour = Population)) +
+    geom_ribbon(data = band, aes(x = expected, ymin = lo, ymax = hi), inherit.aes = FALSE,
+                fill = "grey85", alpha = 0.7) +
     geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "black") +
     geom_point(size = 1.5, alpha = 0.7) +
     scale_color_brewer(palette = "Dark2", name = "Population") +
-    labs(title = plot_title, x = "Expected -log10(P)", y = "Observed -log10(P)") +
+    labs(title = plot_title, x = "Expected -log10(P)", y = "Observed -log10(P)",
+         caption = sprintf("Grey band: pointwise 95%% null interval. lambda SE by %s%s.",
+                           lambda_se_method,
+                           if (lambda_se_method == "bootstrap")
+                             sprintf(" (%d resamples)", lambda_boot_n) else "")) +
     theme_bw() + theme(panel.grid = element_blank(), legend.position = "right")
-  print(p)
-  print(lambda_df)
-  invisible(p)
+  print(qq)
+
+  # Lambda estimates with 95% CIs; the dashed line marks no inflation.
+  forest <- ggplot(lambda_df, aes(x = lambda, y = factor(Population, levels = rev(Population)),
+                                  colour = Population)) +
+    geom_vline(xintercept = 1, linetype = "dashed") +
+    geom_errorbarh(aes(xmin = lambda_lci, xmax = lambda_uci), height = 0.2) +
+    geom_point(size = 2.5) +
+    scale_color_brewer(palette = "Dark2", guide = "none") +
+    labs(title = paste0(sub(" QQ plot$", "", plot_title), ": lambda with 95% CI"), x = "lambda (log scale)", y = NULL) +
+    scale_x_log10() +
+    theme_bw() + theme(panel.grid.minor = element_blank())
+  print(forest)
+
+  cat("\n\n")
+  print(knitr::kable(lambda_df, digits = 3,
+    caption = paste("Genomic inflation (lambda) by population with standard error, 95% CI and Wald test of lambda = 1",
+                    "(CI and test on the log scale; estimates from fewer than ~50 SNPs are imprecise)")))
+  cat("\n\n")
+  invisible(list(qq = qq, forest = forest, lambda = lambda_df))
 }
 
 replication_by_population <- function(reference, target, selection_p, alpha) {
@@ -691,6 +771,8 @@ cat("Selected traits:", paste(names(files), collapse = ", "), "\n")
 cat("Population labels configured:", paste(populations, collapse = ", "), "\n")
 cat("Overall replication discovery p threshold:", replication_discovery_p, "\n")
 cat("Drug-target replication discovery p threshold:", drug_replication_discovery_p, "\n")
-cat("Per-population contribution method:", contribution_method, "\n\n")
+cat("Per-population contribution method:", contribution_method, "\n")
+cat("Lambda SE method:", lambda_se_method,
+    if (lambda_se_method == "bootstrap") paste0("(", lambda_boot_n, " resamples, seed ", lambda_boot_seed, ")") else "", "\n\n")
 print(sessionInfo())
 ```
