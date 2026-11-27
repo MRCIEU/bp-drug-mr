@@ -34,7 +34,10 @@ The report runs the following steps for each trait:
    - `"loo"` (default): a leave-one-out standardised residual. Each population's estimate is compared with the IVW estimate of all the other populations, `(β_j − β_−j) / √(se_j² + se_−j²)`. Under no heterogeneity this follows a standard normal distribution for every population.
    - `"qj"`: the original contribution `w_j(β_fixed − β_j)²` tested on 1 df. This is too small for populations that dominate the pooled estimate. In simulations with no heterogeneity, it gave λ ≈ 0.5 for EUR and ≈ 0.8 for AMR and EAS, compared with ≈ 1.0 for the leave-one-out method.
 
-   The results are shown as tables, a contribution plot, and QQ plots with genomic inflation (λ) for each population.
+   The results are shown as tables, a contribution plot, and QQ plots with genomic inflation (λ) for each population. λ is the median of the chi-square statistics divided by its expected value under the null (0.455). For each population the report also gives:
+   - **Standard error of λ.** By default this is a bootstrap: SNPs are resampled 1,000 times and the SE is the SD of the resampled λ values (`lambda_se_method <- "bootstrap"`). The alternative, `"asymptotic"`, uses the large-sample SE of a median, about 2.33 λ / √n. In simulations with 150 SNPs, both matched the true spread of λ and gave close to 95% coverage.
+   - **95% CI and a test of λ = 1.** These are calculated on the log scale (SE of log λ = SE / λ), so the interval stays positive.
+   - **Plots.** The QQ plot legend shows each λ with its 95% CI, and a grey band marks the pointwise 95% range expected under the null. A second plot shows each λ with its CI against a dashed line at λ = 1.
 4. **Transferability versus EUR.** Each SNP is oriented to the EUR effect-increasing allele. For each non-EUR population, the report gives:
    - the IVW slope through the origin of non-EUR on EUR betas (weights 1/se²), with its 95% CI
    - the proportion of SNPs with the same direction of effect as EUR (sign concordance)
@@ -59,7 +62,7 @@ The report runs the following steps for each trait:
 
    Which traits go in each figure is set by `figure_groups`, and their labels by `trait_labels`, both in the setup chunk.
 
-The QQ plots and λ values are descriptive only. Most traits have between about 100 and 300 SNPs, so these figures are not very precise.
+The QQ plots and λ values are descriptive. With 100–300 SNPs per trait, the 95% CI for λ is roughly ±40% of its value. The drug-target subsets have about 10–140 SNPs, so their λ estimates are much less precise, and those with fewer than about 50 SNPs should not be interpreted.
 
 ## Output
 
@@ -74,7 +77,7 @@ The report has four parts:
    - **Overall heterogeneity summary**: SNPs tested, Bonferroni threshold, and the number of SNPs with Q p < 0.05, Bonferroni-significant and FDR < 0.05
    - **Transferability versus EUR**: `n_snps`, `ivw_slope` with `ivw_slope_se`, `ivw_slope_lci` and `ivw_slope_uci`, `sign_concordance` and `pearson_r`
    - **SNPs passing the Bonferroni threshold**: the IVW estimate (`beta_fixed`, `se_fixed`), `Q`, `Qdf`, `Qpval` and `fdr`
-   - **Per-population contributions**: p-values for every SNP with Q p < 0.05, a contribution plot, and QQ plots with λ for each population
+   - **Per-population contributions**: p-values for every SNP with Q p < 0.05, a contribution plot, a QQ plot with λ and its 95% CI in the legend, a plot of λ with 95% CIs, and a table giving `n_snps`, `lambda`, `lambda_se`, `lambda_lci`, `lambda_uci` and `p_lambda_eq_1` for each population
    - **Forest plots** of the Bonferroni-significant SNPs
    - **Population-level contribution summary**: the proportion of SNPs where each population's contribution has p < 0.05
    - **Expected versus observed replication: all exposure SNPs**: expected and observed counts for sign and significance, with binomial `pdiff`, and the SNPs that were expected but failed to replicate (`expected_power`, `observed_sig`, `expected_sign`, `observed_sign`)
@@ -127,6 +130,9 @@ These are set in the setup chunk:
 | `figure_groups` | blood pressure; lipids | Traits shown in each cross-ancestry figure |
 | `figure_dir` | `../figures` | Where the figure files are saved |
 | `show_ci` | `TRUE` | Whether to draw 95% CIs in the cross-ancestry figures |
+| `lambda_se_method` | `"bootstrap"` | How the SE of λ is calculated (`"bootstrap"` or `"asymptotic"`) |
+| `lambda_boot_n` | 1000 | Number of bootstrap resamples for the SE of λ |
+| `lambda_boot_seed` | 20261127 | Random seed for the bootstrap, so results can be reproduced |
 
 ### Requirements
 
@@ -139,4 +145,5 @@ Required packages are `rmarkdown`, `knitr`, `dplyr`, `tidyr`, `ggplot2` and `sca
 - **Replication power fixed.** In the expected-significance calculation, the second term computed the wrong tail of the normal distribution, so expected counts were close to zero. The observed replication p-value is now two-sided, to match.
 - **Leave-one-out contributions.** These are now the default way to measure each population's contribution to heterogeneity.
 - **New outputs.** The transferability table, cross-ancestry figures and saved figure files are new.
+- **Uncertainty in λ.** Each λ now comes with an SE, a 95% CI and a test of λ = 1. These appear in the QQ plot legend, in a new λ plot and in a new table, and the QQ plot has a 95% null band.
 - **Renamed columns.** In the replication failure table, `expected_pval` and `observed_pval` are now `expected_power` and `observed_sig`.
